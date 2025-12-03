@@ -3,40 +3,233 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Crossy Road 3D – Enhanced (VR)</title>
+  <title>Crossy Road 3D – Enhanced VR</title>
   <style>
     html, body { 
       margin:0; 
       height:100%; 
-      background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+      background: linear-gradient(135deg, #020617 0%, #020617 100%);
       overflow:hidden; 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    #hud { position: fixed; top: 16px; left: 16px; right: 16px; display:flex; justify-content:space-between; align-items:center; color:#fff; z-index:10; pointer-events:none; text-shadow: 0 3px 6px rgba(0,0,0,.8); }
-    .pill{ pointer-events:none; background: linear-gradient(135deg, rgba(59, 130, 246, 0.5) 0%, rgba(37, 99, 235, 0.5) 100%); backdrop-filter: blur(10px); padding: 10px 16px; border-radius: 20px; font-weight: 700; font-size: 16px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-    #level-indicator { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, rgba(168, 85, 247, 0.6) 0%, rgba(139, 92, 246, 0.6) 100%); backdrop-filter: blur(10px); padding: 8px 20px; border-radius: 20px; color: #fff; font-weight: 700; z-index: 10; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-    #progress { position:fixed; bottom: 16px; left: 16px; right: 16px; height: 10px; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
-    #bar { height:100%; width:0%; background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%); border-radius: 10px; transition: width .3s ease; box-shadow: 0 0 20px rgba(74, 222, 128, 0.6); }
-    #loading-text { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 24px; font-weight: 700; z-index: 25; text-align: center; }
-    #gameover, #start-screen { position:fixed; inset:0; display:none; place-items:center; background: rgba(0,0,0,.85); backdrop-filter: blur(10px); color:#fff; text-align:center; z-index:20; animation: fadeIn 0.3s ease; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    #card, #start-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); padding: 32px; border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.7); max-width: 480px; border: 1px solid rgba(255,255,255,0.1); animation: slideUp 0.4s ease; }
-    @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    #card h1, #start-card h1 { margin:0 0 12px 0; font-size: 36px; background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    #card p, #start-card p { opacity:.9; font-size: 18px; margin: 8px 0; }
-    #card button, #start-card button { margin-top: 16px; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: #fff; border: 0; padding: 14px 28px; border-radius: 12px; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4); }
-    #card button:hover, #start-card button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6); }
-    #mobile { position:fixed; bottom: 80px; left:50%; transform:translateX(-50%); display:none; gap: 12px; z-index:15; }
-    .btn-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 180px; }
-    .btn { background: linear-gradient(135deg, rgba(59, 130, 246, 0.4) 0%, rgba(37, 99, 235, 0.4) 100%); backdrop-filter: blur(10px); color: #fff; border: 1px solid rgba(255,255,255,.2); padding: 16px; border-radius: 12px; min-width: 50px; text-align: center; font-weight: 700; font-size: 18px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-    .btn:active { transform: scale(0.95); background: linear-gradient(135deg, rgba(37, 99, 235, 0.6) 0%, rgba(29, 78, 216, 0.6) 100%); }
-    .btn[data-k="KeyW"] { grid-column: 2; } .btn[data-k="KeyA"] { grid-column: 1; grid-row: 2; } .btn[data-k="KeyS"] { grid-column: 2; grid-row: 2; } .btn[data-k="KeyD"] { grid-column: 3; grid-row: 2; }
-    .stats { display: flex; justify-content: space-around; margin: 20px 0; gap: 16px; }
-    .stat-item { flex: 1; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
-    .stat-label { font-size: 14px; opacity: 0.7; margin-bottom: 4px; }
-    .stat-value { font-size: 24px; font-weight: 700; color: #4ade80; }
-    @media (max-width: 820px){ #mobile { display:block; } #progress { bottom: 160px; } }
-    #enter-vr-fallback { position: fixed; right: 16px; bottom: 20px; z-index: 30; background: rgba(255,255,255,0.06); color:#fff; border: 0; padding:10px 14px; border-radius:10px; cursor:pointer; backdrop-filter: blur(6px); display:none; }
+    
+    #hud {
+      position: fixed; 
+      top: 16px; 
+      left: 16px; 
+      right: 16px;
+      display:flex; 
+      justify-content:space-between; 
+      align-items:center;
+      color:#fff; 
+      z-index:10; 
+      pointer-events:none;
+      text-shadow: 0 3px 6px rgba(0,0,0,.8);
+    }
+    
+    .pill{ 
+      pointer-events:none; 
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.5) 0%, rgba(37, 99, 235, 0.5) 100%);
+      backdrop-filter: blur(10px);
+      padding: 10px 16px; 
+      border-radius: 20px; 
+      font-weight: 700;
+      font-size: 16px;
+      border: 1px solid rgba(255,255,255,0.2);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    
+    #level-indicator {
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.6) 0%, rgba(139, 92, 246, 0.6) 100%);
+      backdrop-filter: blur(10px);
+      padding: 8px 20px;
+      border-radius: 20px;
+      color: #fff;
+      font-weight: 700;
+      z-index: 10;
+      border: 1px solid rgba(255,255,255,0.3);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+    
+    #progress { 
+      position:fixed; 
+      bottom: 16px; 
+      left: 16px; 
+      right: 16px; 
+      height: 10px; 
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(5px);
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+    
+    #bar { 
+      height:100%; 
+      width:0%; 
+      background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+      border-radius: 10px; 
+      transition: width .3s ease;
+      box-shadow: 0 0 20px rgba(74, 222, 128, 0.6);
+    }
+    
+    #loading-text {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 24px;
+      font-weight: 700;
+      z-index: 25;
+      text-align: center;
+    }
+    
+    #gameover, #start-screen {
+      position:fixed; 
+      inset:0; 
+      display:none; 
+      place-items:center; 
+      background: rgba(0,0,0,.85);
+      backdrop-filter: blur(10px);
+      color:#fff; 
+      text-align:center; 
+      z-index:20;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    #card, #start-card { 
+      background: linear-gradient(135deg, #020617 0%, #020617 100%);
+      padding: 32px; 
+      border-radius: 24px; 
+      box-shadow: 0 20px 60px rgba(0,0,0,.9);
+      max-width: 480px;
+      border: 1px solid rgba(255,255,255,0.1);
+      animation: slideUp 0.4s ease;
+    }
+    
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    
+    #card h1, #start-card h1 { 
+      margin:0 0 12px 0; 
+      font-size: 36px;
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    #card p, #start-card p { 
+      opacity:.9; 
+      font-size: 18px;
+      margin: 8px 0;
+    }
+    
+    #card button, #start-card button { 
+      margin-top: 16px; 
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: #fff; 
+      border: 0; 
+      padding: 14px 28px; 
+      border-radius: 12px; 
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+    }
+    
+    #card button:hover, #start-card button:hover { 
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6);
+    }
+    
+    #mobile { 
+      position:fixed; 
+      bottom: 80px; 
+      left:50%; 
+      transform:translateX(-50%); 
+      display:none; 
+      gap: 12px; 
+      z-index:15;
+    }
+    
+    .btn-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      width: 180px;
+    }
+    
+    .btn { 
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.4) 0%, rgba(37, 99, 235, 0.4) 100%);
+      backdrop-filter: blur(10px);
+      color: #fff; 
+      border: 1px solid rgba(255,255,255,.2); 
+      padding: 16px; 
+      border-radius: 12px; 
+      min-width: 50px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+    
+    .btn:active {
+      transform: scale(0.95);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.6) 0%, rgba(29, 78, 216, 0.6) 100%);
+    }
+    
+    .btn[data-k="KeyW"] { grid-column: 2; }
+    .btn[data-k="KeyA"] { grid-column: 1; grid-row: 2; }
+    .btn[data-k="KeyS"] { grid-column: 2; grid-row: 2; }
+    .btn[data-k="KeyD"] { grid-column: 3; grid-row: 2; }
+    
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+      gap: 16px;
+    }
+    
+    .stat-item {
+      flex: 1;
+      background: rgba(255,255,255,0.05);
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #4ade80;
+    }
+    
+    @media (max-width: 820px){
+      #mobile { display:block; }
+      #progress { bottom: 160px; }
+    }
   </style>
 </head>
 <body>
@@ -46,15 +239,17 @@
   <!-- Start Screen -->
   <div id="start-screen">
     <div id="start-card">
-      <h1>🎮 Crossy Road 3D</h1>
-      <p>Cruza la carretera esquivando obstáculos</p>
+      <h1>🎮 Crossy Road 3D VR</h1>
+      <p>Cruza la carretera esquivando obstáculos – ahora en VR (Meta Quest)</p>
       <div style="margin: 20px 0; text-align: left; opacity: 0.8;">
-        <p><strong>Controles:</strong></p>
+        <p><strong>Controles teclado (PC):</strong></p>
         <p>• W/↑ - Avanzar</p>
         <p>• A/← - Izquierda</p>
         <p>• S/↓ - Retroceder</p>
         <p>• D/→ - Derecha</p>
-        <p>En VR: joystick para moverte y botón "select" para avanzar (mapea al control rápido).</p>
+        <p style="margin-top:12px;"><strong>Controles VR (Quest):</strong></p>
+        <p>• Joystick – mover por la cuadrícula</p>
+        <p>• Gira la cabeza – cámara en primera persona</p>
       </div>
       <button id="start-btn">¡Comenzar!</button>
     </div>
@@ -103,12 +298,8 @@
     </div>
   </div>
 
-  <!-- desktop VR fallback button -->
-  <button id="enter-vr-fallback">ENTER VR</button>
-
-  <!-- Three and loaders -->
+  <!-- Three.js + loaders -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
@@ -117,12 +308,22 @@
   // ============ CONFIGURATION ============
   const CONFIG = {
     tile: 2.0,
+    segmentLength: 10,
     segmentsAhead: 18,
     segmentsBehind: 8,
     lanes: 5,
     laneWidth: 2.0,
-    player: { speed: 0.22, radius: 0.8 },
-    obstacles: { carSpeedMin: 2.0, carSpeedMax: 4.5, spawnProb: 0.6 },
+    player: {
+      speed: 0.22,
+      radius: 0.8
+    },
+    obstacles: {
+      carSpeedMin: 2.0,
+      carSpeedMax: 4.5,
+      logSpeedMin: 1.5,
+      logSpeedMax: 3.0,
+      spawnProb: 0.6
+    },
     lives: 3,
     levelThreshold: 15,
     pointsPerMove: 10,
@@ -140,19 +341,39 @@
   let difficultyMultiplier = 1.0;
   let animations = {};
   let currentAction = null;
-
-  // VR controller gamepad state
-  let controllerGamepad1 = null;
-  let controllerGamepad2 = null;
-  let lastVRMoveTime = 0;
-  const VR_MOVE_COOLDOWN = 200; // ms
-
+  
   // Loaded models
   let carModels = [];
   let loadedCount = 0;
-  const totalModels = 5; // adjust if you change assets
+  const totalModels = 7; // 3 cars + 1 player + HDR + 2 props
 
-  // UI elements
+  // ============ VR / AUDIO / NAVIGATION STATE ============
+  let vrRig = null;
+  let controller1 = null;
+  let controller2 = null;
+  let controllerGamepad1 = null;
+  let controllerGamepad2 = null;
+  let lastVRMoveTime = 0;
+  const VR_MOVE_COOLDOWN = 200; // ms entre movimientos de rejilla
+
+  // Audio
+  let audioListener = null;
+  let bgMusic = null;
+  let collisionSound = null;
+  let audioLoader = null;
+
+  // Límites de navegación (X/Z) según segmentos generados
+  const navBounds = {
+    minX: null,
+    maxX: null,
+    minZ: null,
+    maxZ: null
+  };
+
+  // Texturas terreno (solo TEXTURAS/)
+  const textureLoader = new THREE.TextureLoader();
+
+  // ============ UI ELEMENTS ============
   const distUI = document.getElementById('dist');
   const livesUI = document.getElementById('lives');
   const scoreUI = document.getElementById('score');
@@ -168,14 +389,14 @@
   const finalLevel = document.getElementById('finalLevel');
   const retryBtn = document.getElementById('retry');
   const startBtn = document.getElementById('start-btn');
-  const enterVrFallback = document.getElementById('enter-vr-fallback');
 
-  // Materials
+  // ============ MATERIALS (global) ============
   let materials = {};
 
-  // ============ VRButton (simple non-module implementation) ============
+  // ============ MINIMAL VR BUTTON (WebXR entry) ============
   const VRButton = {
-    createButton: function (renderer) {
+    createButton: function (renderer, options) {
+      if (!options) options = {};
       const button = document.createElement('button');
       button.style.position = 'absolute';
       button.style.bottom = '20px';
@@ -191,88 +412,257 @@
       button.style.boxShadow = '0 0 18px rgba(0,0,0,0.45)';
       button.textContent = 'Enter VR';
 
+      function showEnterVR() {
+        button.textContent = 'Enter VR';
+      }
+
+      function showExitVR() {
+        button.textContent = 'Exit VR';
+      }
+
       function showUnsupported() {
         button.textContent = 'VR no disponible';
         button.disabled = true;
         button.style.background = '#4b5563';
       }
 
-      if ('xr' in navigator) {
-        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-          if (!supported) {
-            showUnsupported();
-            return;
-          }
-          let currentSession = null;
-
-          async function onClick() {
-            if (currentSession) {
-              await currentSession.end();
-              return;
-            }
-            try {
-              const session = await navigator.xr.requestSession('immersive-vr', {
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers', 'layers', 'hit-test']
-              });
-              currentSession = session;
-              renderer.xr.setSession(session);
-              button.textContent = 'Exit VR';
-              enterVrFallback.style.display = 'none';
-              session.addEventListener('end', () => {
-                currentSession = null;
-                button.textContent = 'Enter VR';
-                enterVrFallback.style.display = 'block';
-              });
-            } catch (e) {
-              console.error('No se pudo iniciar la sesión XR', e);
-            }
-          }
-
-          button.addEventListener('click', onClick);
-        }).catch((err) => {
-          console.warn('Error comprobando XR:', err);
-          showUnsupported();
-        });
-      } else {
-        showUnsupported();
+      function showError(error) {
+        console.error(error);
+        button.textContent = 'Error VR';
+        button.disabled = true;
+        button.style.background = '#dc2626';
       }
+
+      if (!('xr' in navigator)) {
+        showUnsupported();
+        return button;
+      }
+
+      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (!supported) {
+          showUnsupported();
+          return;
+        }
+
+        let currentSession = null;
+
+        async function onSessionStarted(session) {
+          currentSession = session;
+          await renderer.xr.setSession(session);
+          button.textContent = 'Exit VR';
+          
+          session.addEventListener('end', onSessionEnded);
+          
+          // Configuración para Meta Quest
+          session.updateRenderState({
+            baseLayer: new XRWebGLLayer(session, renderer.getContext())
+          });
+        }
+
+        function onSessionEnded() {
+          currentSession = null;
+          button.textContent = 'Enter VR';
+        }
+
+        button.addEventListener('click', async function () {
+          if (currentSession === null) {
+            try {
+              const sessionInit = { 
+                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
+              };
+              const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
+              await onSessionStarted(session);
+            } catch (err) {
+              showError(err);
+            }
+          } else {
+            await currentSession.end();
+          }
+        });
+      }).catch(showError);
 
       return button;
     }
   };
 
+  // ============ VERIFICACIÓN DE VR ============
+  function checkVRSupport() {
+    if ('xr' in navigator) {
+      return navigator.xr.isSessionSupported('immersive-vr');
+    }
+    return Promise.resolve(false);
+  }
+
+  // ============ VR CONTROLLERS & JOYSTICK INPUT ============
+  function setupVRControllers() {
+    if (!renderer || !renderer.xr) return;
+
+    controller1 = renderer.xr.getController(0);
+    controller2 = renderer.xr.getController(1);
+
+    const controllerGeom = new THREE.CapsuleGeometry(0.02, 0.08, 4, 8);
+    const controllerMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x22c55e,
+      emissiveIntensity: 0.4
+    });
+
+    const controllerMesh1 = new THREE.Mesh(controllerGeom, controllerMat);
+    controllerMesh1.position.set(0, 0, -0.05);
+    controller1.add(controllerMesh1);
+
+    const controllerMesh2 = new THREE.Mesh(controllerGeom, controllerMat);
+    controllerMesh2.position.set(0, 0, -0.05);
+    controller2.add(controllerMesh2);
+
+    // Eventos de conexión para Meta Quest
+    controller1.addEventListener('connected', function (event) {
+      console.log('Controller 1 connected:', event.data);
+      this.userData.gamepad = event.data.gamepad;
+      controllerGamepad1 = this.userData.gamepad;
+    });
+
+    controller1.addEventListener('disconnected', function () {
+      console.log('Controller 1 disconnected');
+      controllerGamepad1 = null;
+      delete this.userData.gamepad;
+    });
+
+    controller2.addEventListener('connected', function (event) {
+      console.log('Controller 2 connected:', event.data);
+      this.userData.gamepad = event.data.gamepad;
+      controllerGamepad2 = this.userData.gamepad;
+    });
+
+    controller2.addEventListener('disconnected', function () {
+      console.log('Controller 2 disconnected');
+      controllerGamepad2 = null;
+      delete this.userData.gamepad;
+    });
+
+    scene.add(controller1);
+    scene.add(controller2);
+  }
+
+  // Lee el joystick y lo traduce a W/A/S/D en rejilla
+  function processVRInput(dt) {
+    if (!renderer || !renderer.xr || !renderer.xr.isPresenting || !player) return;
+    const now = performance.now();
+    if (now - lastVRMoveTime < VR_MOVE_COOLDOWN) return;
+
+    let axisX = 0;
+    let axisY = 0;
+    
+    // Verifica gamepads activos
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    
+    for (const gamepad of gamepads) {
+      if (!gamepad) continue;
+      
+      // Meta Quest usa axes 2 y 3 para el joystick principal
+      if (gamepad.axes && gamepad.axes.length >= 4) {
+        const x = gamepad.axes[2] || 0;
+        const y = gamepad.axes[3] || 0;
+        
+        if (Math.abs(x) > Math.abs(axisX)) axisX = x;
+        if (Math.abs(y) > Math.abs(axisY)) axisY = y;
+      }
+    }
+
+    const threshold = 0.45;
+    let code = null;
+
+    if (axisY < -threshold) {
+      code = 'KeyW';
+    } else if (axisY > threshold) {
+      code = 'KeyS';
+    } else if (axisX < -threshold) {
+      code = 'KeyA';
+    } else if (axisX > threshold) {
+      code = 'KeyD';
+    }
+
+    if (code) {
+      handleMove(code);
+      lastVRMoveTime = now;
+    }
+  }
+
+  // Actualiza límites de navegación con base en segmentos activos
+  function updateNavigationBounds() {
+    if (!segments.length) return;
+    const first = segments[0];
+    const last = segments[segments.length - 1];
+    const maxLane = Math.floor(CONFIG.lanes / 2) * CONFIG.laneWidth;
+
+    navBounds.minX = -maxLane;
+    navBounds.maxX = maxLane;
+
+    navBounds.minZ = -last.z * CONFIG.tile - CONFIG.tile * 0.5;
+    navBounds.maxZ = -first.z * CONFIG.tile + CONFIG.tile * 0.5;
+  }
+
   // ============ INITIALIZATION ============
   init();
 
   function init() {
-    // Scene
+    // Scene setup (tema nocturno / survival)
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050816);
-    scene.fog = new THREE.Fog(0x050816, 20, 70);
+    const nightColor = new THREE.Color(0x050816);
+    scene.background = nightColor.clone();
+    scene.fog = new THREE.Fog(nightColor.getHex(), 20, 70);
 
     clock = new THREE.Clock();
 
-    // Camera
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.set(0, 1.6, 0); // default eye height
+    // Camera + VR rig
+    camera = new THREE.PerspectiveCamera(
+      55, 
+      window.innerWidth / window.innerHeight, 
+      0.1, 
+      500
+    );
 
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    vrRig = new THREE.Group();
+    vrRig.position.set(0, 0, 8);
+    camera.position.set(0, 1.6, 0); // altura de ojos
+    vrRig.add(camera);
+    scene.add(vrRig);
+
+    // Renderer + WebXR
+    renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: false 
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.6;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    // Configuración WebXR para Meta Quest
     renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local-floor'); // Importante para Quest
+    
     document.body.appendChild(renderer.domElement);
 
-    // VR button
     const vrButton = VRButton.createButton(renderer);
     document.body.appendChild(vrButton);
-    enterVrFallback.style.display = 'block';
-    enterVrFallback.onclick = () => vrButton.click();
 
-    // Lights
+    // Verifica soporte VR
+    checkVRSupport().then((supported) => {
+      if (supported) {
+        console.log('VR is supported on this device');
+      } else {
+        console.warn('VR is not supported on this device');
+      }
+    });
+
+    // Iluminación nocturna
     const hemi = new THREE.HemisphereLight(0x555577, 0x050509, 0.8);
     scene.add(hemi);
+    
     const sun = new THREE.DirectionalLight(0xfff1c1, 1.0);
     sun.position.set(10, 20, 5);
     sun.castShadow = true;
@@ -284,247 +674,337 @@
     sun.shadow.mapSize.height = 2048;
     scene.add(sun);
 
-    // Textures & materials (using placeholder colors/textures)
-    const loaderTex = new THREE.TextureLoader();
-    const grassTex = loaderTex.load('TEXTURAS/grass.png', undefined, undefined, () => {});
+    // Texturas desde TEXTURAS/
+    const grassTex = textureLoader.load('TEXTURAS/grass.png');
     grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
     grassTex.anisotropy = 4;
 
-    materials.grass = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.9, metalness: 0.0 });
-    materials.road = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.85, metalness: 0.05 });
-    materials.roadLine = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 0.3, roughness: 0.7 });
-    materials.rock = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 1.0, metalness: 0 });
+    const roadTex = textureLoader.load('TEXTURAS/road.png');
+    roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+    roadTex.anisotropy = 4;
 
-    // Ground group
+    const woodTex = textureLoader.load('TEXTURAS/wood.png');
+    woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
+    woodTex.anisotropy = 4;
+
+    const rockTex = textureLoader.load('TEXTURAS/rock.png');
+    rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping;
+    rockTex.anisotropy = 4;
+
+    // Materials usando SOLO las texturas
+    materials.grass = new THREE.MeshStandardMaterial({ 
+      map: grassTex,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+    
+    materials.road = new THREE.MeshStandardMaterial({ 
+      map: roadTex,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+    
+    materials.roadLine = new THREE.MeshStandardMaterial({ 
+      color: 0xfbbf24,
+      emissive: 0xfbbf24,
+      emissiveIntensity: 0.3,
+      roughness: 0.7,
+      metalness: 0.0
+    });
+    
+    materials.log = new THREE.MeshStandardMaterial({ 
+      map: woodTex,
+      roughness: 0.8,
+      metalness: 0.1
+    });
+    
+    materials.rock = new THREE.MeshStandardMaterial({ 
+      map: rockTex,
+      roughness: 1.0,
+      metalness: 0
+    });
+
+    // Audio
+    audioListener = new THREE.AudioListener();
+    camera.add(audioListener);
+    audioLoader = new THREE.AudioLoader();
+    bgMusic = new THREE.Audio(audioListener);
+    collisionSound = new THREE.Audio(audioListener);
+
+    audioLoader.load('rgbe/song.wav', (buffer) => {
+      bgMusic.setBuffer(buffer);
+      bgMusic.setLoop(true);
+      bgMusic.setVolume(0.35);
+      if (gameStarted && !bgMusic.isPlaying) bgMusic.play();
+    });
+
+    audioLoader.load('rgbe/punch.wav', (buffer) => {
+      collisionSound.setBuffer(buffer);
+      collisionSound.setLoop(false);
+      collisionSound.setVolume(0.9);
+    });
+
+    // Ground container
     window.ground = new THREE.Group();
     scene.add(window.ground);
 
-    // Controllers (add early so they exist)
+    // VR controllers
     setupVRControllers();
 
-    // Load HDR and models
+    // Load HDR environment and models
     loadHDREnvironment();
     loadModels();
 
     // Event listeners
     window.addEventListener('resize', onResize);
     window.addEventListener('keydown', onKey);
-
-    // Mobile buttons
+    
+    // Mobile controls
     document.querySelectorAll('#mobile .btn').forEach(b => {
-      b.addEventListener('click', () => { if (!gameStarted) return; handleMove(b.getAttribute('data-k')); });
+      b.addEventListener('click', () => {
+        if (!gameStarted) return;
+        handleMove(b.getAttribute('data-k'));
+      });
     });
 
-    // Start/retry
+    // Start button
     startBtn.onclick = startGame;
     retryBtn.onclick = () => location.reload();
   }
 
-  // ============ VR CONTROLLERS SETUP ============
-  let controller1 = null;
-  let controller2 = null;
-
-  function setupVRControllers() {
-    // controllers will be attached when session starts; keep placeholders
-    // We'll poll renderer.xr.getController(...) after session begins
-    // But create simple pointer meshes to show controllers when present
-  }
-
-  function attachControllersIfReady() {
-    try {
-      controller1 = renderer.xr.getController(0);
-      controller2 = renderer.xr.getController(1);
-
-      // Simple controller visuals
-      const controllerGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6);
-      const controllerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x22c55e, emissiveIntensity: 0.2 });
-      const mesh1 = new THREE.Mesh(controllerGeom, controllerMat);
-      mesh1.rotation.x = Math.PI / 2;
-      mesh1.position.z = -0.06;
-      controller1.add(mesh1);
-
-      const mesh2 = mesh1.clone();
-      controller2.add(mesh2);
-
-      controller1.addEventListener('connected', (e) => {
-        if (e.data && e.data.gamepad) controllerGamepad1 = e.data.gamepad;
-        controller1.userData.inputSource = e.data;
-      });
-      controller1.addEventListener('disconnected', () => { controllerGamepad1 = null; delete controller1.userData.inputSource; });
-
-      controller2.addEventListener('connected', (e) => {
-        if (e.data && e.data.gamepad) controllerGamepad2 = e.data.gamepad;
-        controller2.userData.inputSource = e.data;
-      });
-      controller2.addEventListener('disconnected', () => { controllerGamepad2 = null; delete controller2.userData.inputSource; });
-
-      controller1.addEventListener('selectstart', () => { // forward
-        if (gameStarted) handleMove('KeyW');
-      });
-      controller2.addEventListener('selectstart', () => { // back
-        if (gameStarted) handleMove('KeyS');
-      });
-
-      scene.add(controller1);
-      scene.add(controller2);
-    } catch (e) {
-      // ignore until session started
-    }
-  }
-
-  function processVRInput(dt) {
-    if (!renderer.xr.isPresenting || !player) return;
-    const now = performance.now();
-    if (now - lastVRMoveTime < VR_MOVE_COOLDOWN) return;
-
-    // read axes
-    let axisX = 0, axisY = 0;
-    const pads = [];
-    if (controllerGamepad1 && controllerGamepad1.axes) pads.push(controllerGamepad1);
-    if (controllerGamepad2 && controllerGamepad2.axes) pads.push(controllerGamepad2);
-
-    pads.forEach(p => {
-      if (!p.axes || p.axes.length < 2) return;
-      const x = p.axes[0];
-      const y = p.axes[1];
-      if (Math.abs(x) > Math.abs(axisX)) axisX = x;
-      if (Math.abs(y) > Math.abs(axisY)) axisY = y;
-    });
-
-    const threshold = 0.6;
-    if (axisY < -threshold) { handleMove('KeyW'); lastVRMoveTime = now; }
-    else if (axisY > threshold) { handleMove('KeyS'); lastVRMoveTime = now; }
-    else if (axisX < -threshold) { handleMove('KeyA'); lastVRMoveTime = now; }
-    else if (axisX > threshold) { handleMove('KeyD'); lastVRMoveTime = now; }
-  }
-
-  // ============ HDR & MODELS ============
+  // ============ HDR ENVIRONMENT LOADING ============
   function loadHDREnvironment() {
     const rgbeLoader = new THREE.RGBELoader();
-    rgbeLoader.load('rgbe/wide_street_4k.hdr',
+    
+    rgbeLoader.load(
+      'rgbe/wide_street_4k.hdr',
       (texture) => {
         texture.mapping = THREE.EquirectangularReflectionMapping;
+        texture.encoding = THREE.RGBEEncoding; // Añade esta línea
+
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileEquirectangularShader();
         const envMap = pmremGenerator.fromEquirectangular(texture).texture;
         scene.environment = envMap;
+        scene.background = envMap; // Usa el HDR como fondo
         pmremGenerator.dispose();
-        Object.values(materials).forEach(mat => { if (mat && (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) { mat.envMap = envMap; mat.needsUpdate = true; }});
+
+        // Ajusta exposición para VR
+        renderer.toneMappingExposure = 1.0;
+
+        Object.values(materials).forEach(mat => {
+          if (mat && (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) {
+            mat.envMap = envMap;
+            mat.needsUpdate = true;
+          }
+        });
+
+        console.log('HDR environment loaded');
         onModelLoaded();
       },
-      undefined,
-      (err) => {
-        console.warn('HDR not found', err);
+      (progress) => {
+        if (progress.total > 0) {
+          const percent = (progress.loaded / progress.total) * 100;
+          console.log(`HDR loading: ${percent.toFixed(0)}%`);
+        }
+      },
+      (error) => {
+        console.warn('HDR environment not found, using fallback dark sky');
+        const nightColor = new THREE.Color(0x050816);
+        scene.background = nightColor.clone();
+        scene.fog.color.copy(nightColor);
         onModelLoaded();
       }
     );
   }
 
+  // ============ MODEL LOADING ============
   function loadModels() {
     const gltfLoader = new THREE.GLTFLoader();
     const fbxLoader = new THREE.FBXLoader();
 
     const carConfigs = [
-      { path: 'Models/car1.glb', rotation: Math.PI / 2 },
-      { path: 'Models/car2.glb', rotation: 0 },
-      { path: 'Models/coupe_car.glb', rotation: 0 }
+      { path: 'Models/car1.glb', scale: 1.2, rotation: Math.PI / 2 },
+      { path: 'Models/car2.glb', scale: 1.0, rotation: 0 },
+      { path: 'Models/coupe_car.glb', scale: 1.0, rotation: 0 }
     ];
-
-    carConfigs.forEach((cfg, idx) => {
-      gltfLoader.load(cfg.path,
+    
+    carConfigs.forEach((config, index) => {
+      gltfLoader.load(
+        config.path,
         (gltf) => {
           const model = gltf.scene;
-          // normalize size
+          
           const box = new THREE.Box3().setFromObject(model);
           const size = box.getSize(new THREE.Vector3());
           const maxDim = Math.max(size.x, size.y, size.z);
           const targetSize = 2.0;
-          const normalizeScale = (maxDim > 0) ? targetSize / maxDim : 1;
+          const normalizeScale = targetSize / maxDim;
+          
           model.scale.set(normalizeScale, normalizeScale, normalizeScale);
-          if (cfg.rotation) model.rotation.y = cfg.rotation;
+          
+          if (config.rotation !== 0) {
+            model.rotation.y = config.rotation;
+          }
+          
+          box.setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          model.position.set(-center.x, 0, -center.z);
+          
           const wrapper = new THREE.Group();
           wrapper.add(model);
-          wrapper.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }});
+          
+          wrapper.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          
           carModels.push(wrapper);
+          console.log(`Loaded ${config.path} successfully`);
           onModelLoaded();
         },
         (progress) => {
-          if (progress.total) updateLoadingProgress(idx, (progress.loaded / progress.total) / carConfigs.length);
+          if (progress.total > 0) {
+            const percent = (progress.loaded / progress.total) * 100;
+            updateLoadingProgress(index, percent / carConfigs.length);
+          }
         },
-        (err) => {
-          console.error('Error loading car', cfg.path, err);
-          carModels.push(createFallbackCar());
+        (error) => {
+          console.error(`Error loading ${config.path}:`, error);
+          const fallbackCar = createFallbackCar();
+          carModels.push(fallbackCar);
           onModelLoaded();
         }
       );
     });
 
-    // player model (FBX)
-    fbxLoader.load('Models/Taunt.fbx',
+    // Player
+    fbxLoader.load(
+      'Models/Taunt.fbx',
       (fbx) => {
         playerModel = fbx;
         playerModel.scale.set(0.01, 0.01, 0.01);
         playerModel.position.set(0, 0, 0);
-        playerModel.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }});
+        
+        playerModel.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
         mixer = new THREE.AnimationMixer(playerModel);
-        if (fbx.animations && fbx.animations.length) {
+        
+        console.log('Player model loaded successfully');
+        
+        if (fbx.animations && fbx.animations.length > 0) {
           animations.idle = mixer.clipAction(fbx.animations[0]);
           animations.idle.setLoop(THREE.LoopRepeat);
         }
-        // try load additional anims
+        
         fbxLoader.load('Models/reposo.fbx', (anim) => {
-          if (anim.animations && anim.animations.length) {
+          if (anim.animations && anim.animations.length > 0) {
             animations.idle = mixer.clipAction(anim.animations[0]);
             animations.idle.setLoop(THREE.LoopRepeat);
+            console.log('External idle animation loaded');
           }
           loadRunAnimation(fbxLoader);
-        }, undefined, () => { loadRunAnimation(fbxLoader); });
+        }, undefined, (error) => {
+          console.warn('Idle animation not found, continuing without it:', error);
+          loadRunAnimation(fbxLoader);
+        });
       },
-      (progress) => { if (progress.total) updateLoadingProgress(3, (progress.loaded / progress.total) / totalModels); },
-      (err) => {
-        console.error('Error loading player', err);
-        const geo = new THREE.BoxGeometry(1,1.5,0.8);
-        const mat = new THREE.MeshStandardMaterial({ color: 0x22c55e });
-        playerModel = new THREE.Mesh(geo, mat);
+      (progress) => {
+        if (progress.total > 0) {
+          const percent = (progress.loaded / progress.total) * 100;
+          updateLoadingProgress(3, percent / totalModels);
+        }
+      },
+      (error) => {
+        console.error('Error loading player model:', error);
+        const geometry = new THREE.BoxGeometry(1, 1.5, 0.8);
+        const material = new THREE.MeshStandardMaterial({ color: 0x22c55e });
+        playerModel = new THREE.Mesh(geometry, material);
         playerModel.castShadow = true;
         mixer = new THREE.AnimationMixer(playerModel);
         onModelLoaded();
       }
     );
 
-    // optional props (not required)
-    fbxLoader.load('Models/muerte.fbx', (res) => { /* ignore */ }, undefined, () => {});
-    fbxLoader.load('Models/wood box.fbx', (res) => { /* ignore */ }, undefined, () => {});
+    // Carga props temáticos (opcional)
+    fbxLoader.load('Models/muerte.fbx', (spooky) => {
+      console.log('Loaded thematic model muerte.fbx');
+      (spooky.scene || spooky).traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+    }, undefined, () => {
+      console.warn('muerte.fbx not found, continuing without it');
+    });
+
+    fbxLoader.load('Models/wood box.fbx', (crate) => {
+      console.log('Loaded thematic model wood box.fbx');
+      (crate.scene || crate).traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+    }, undefined, () => {
+      console.warn('wood box.fbx not found, continuing without it');
+    });
   }
 
   function loadRunAnimation(fbxLoader) {
     fbxLoader.load('Models/correr.fbx', (anim) => {
-      if (anim.animations && anim.animations.length) {
+      if (anim.animations && anim.animations.length > 0) {
         animations.run = mixer.clipAction(anim.animations[0]);
         animations.run.setLoop(THREE.LoopRepeat);
       }
       loadDeathAnimation(fbxLoader);
-    }, undefined, () => { loadDeathAnimation(fbxLoader); });
+    }, undefined, (error) => {
+      console.warn('Run animation not found, continuing without it:', error);
+      loadDeathAnimation(fbxLoader);
+    });
   }
 
   function loadDeathAnimation(fbxLoader) {
     fbxLoader.load('Models/muerte.fbx', (anim) => {
-      if (anim.animations && anim.animations.length) {
+      if (anim.animations && anim.animations.length > 0) {
         animations.death = mixer.clipAction(anim.animations[0]);
         animations.death.setLoop(THREE.LoopOnce);
         animations.death.clampWhenFinished = true;
       }
       onModelLoaded();
-    }, undefined, () => { onModelLoaded(); });
+    }, undefined, (error) => {
+      console.warn('Death animation not found, continuing without it:', error);
+      onModelLoaded();
+    });
   }
 
   function createFallbackCar() {
     const group = new THREE.Group();
     const bodyGeo = new THREE.BoxGeometry(1.4, 0.9, 2.2);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, roughness: 0.3, metalness: 0.7 });
-    const body = new THREE.Mesh(bodyGeo, bodyMat); body.position.y = 0.45; body.castShadow = true; group.add(body);
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+      color: Math.random() * 0xffffff,
+      roughness: 0.3,
+      metalness: 0.7
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.45;
+    body.castShadow = true;
+    group.add(body);
+
     const roofGeo = new THREE.BoxGeometry(1.2, 0.6, 1.2);
-    const roof = new THREE.Mesh(roofGeo, bodyMat); roof.position.set(0,0.9,-0.2); roof.castShadow=true; group.add(roof);
+    const roof = new THREE.Mesh(roofGeo, bodyMat);
+    roof.position.set(0, 0.9, -0.2);
+    roof.castShadow = true;
+    group.add(roof);
+
     return group;
   }
 
@@ -532,7 +1012,11 @@
     loadedCount++;
     const progress = loadedCount / totalModels;
     updateLoadingProgress(loadedCount - 1, progress);
+    
+    console.log(`Loading progress: ${loadedCount}/${totalModels} (${Math.round(progress * 100)}%)`);
+
     if (loadedCount >= totalModels) {
+      console.log('All models loaded, initializing game...');
       finishLoading();
     }
   }
@@ -545,88 +1029,149 @@
 
   function finishLoading() {
     loadingText.style.display = 'none';
+    
     if (playerModel) {
       player = new THREE.Group();
       player.add(playerModel);
       player.position.set(0, 0, 0);
       scene.add(player);
-      if (animations.idle) { currentAction = animations.idle; currentAction.play(); }
+      
+      if (animations.idle) {
+        currentAction = animations.idle;
+        currentAction.play();
+      }
     }
+
     startScreen.style.display = 'grid';
-    setTimeout(() => { document.getElementById('progress').style.display = 'none'; }, 300);
+    
+    setTimeout(() => {
+      document.getElementById('progress').style.display = 'none';
+    }, 300);
   }
 
-  // ============ GAME START & SEGMENTS ============
+  // ============ GAME START ============
   function startGame() {
     startScreen.style.display = 'none';
     hud.style.display = 'flex';
     levelIndicator.style.display = 'block';
     gameStarted = true;
-
-    // attach controllers if session already active
-    attachControllersIfReady();
-
+    
     for (let i = -CONFIG.segmentsBehind; i <= CONFIG.segmentsAhead; i++) {
-      const seg = (i <= 2) ? addSafeSegment(i) : (Math.random() < 0.6 ? addRoadSegment(i) : addSafeSegment(i));
+      const seg = (i <= 2) ? addSafeSegment(i) : 
+                   (Math.random() < 0.6 ? addRoadSegment(i) : addSafeSegment(i));
       segments.push(seg);
     }
 
-    // ensure VR loop
-    renderer.setAnimationLoop(gameLoop);
+    updateNavigationBounds();
+
+    if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
+      bgMusic.play();
+    }
+    
+    animate();
   }
 
+  // ============ SEGMENT GENERATION ============
   function addSafeSegment(zIndex) {
     const tileW = CONFIG.lanes * CONFIG.laneWidth + 4.0;
-    const plane = new THREE.Mesh(new THREE.BoxGeometry(tileW, 0.3, CONFIG.tile), materials.grass);
+    const plane = new THREE.Mesh(
+      new THREE.BoxGeometry(tileW, 0.3, CONFIG.tile), 
+      materials.grass
+    );
     plane.position.set(0, -0.15, -zIndex * CONFIG.tile);
     plane.receiveShadow = true;
     window.ground.add(plane);
+
     const created = [plane];
+    
     if (Math.random() < 0.3) {
-      for (let i=0;i<2;i++){
-        const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + Math.random()*0.3), materials.rock);
-        const lane = (Math.random()-0.5) * (CONFIG.lanes-1) * CONFIG.laneWidth;
-        r.position.set(lane, 0.4, -zIndex*CONFIG.tile + (Math.random()-0.5));
+      for (let i = 0; i < 2; i++) {
+        const r = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3), 
+          materials.rock
+        );
+        const lane = (Math.random() - 0.5) * (CONFIG.lanes - 1) * CONFIG.laneWidth;
+        r.position.set(lane, 0.4, -zIndex * CONFIG.tile + (Math.random() - 0.5));
         r.castShadow = true;
-        r.userData = { type: 'rock', isObstacle: true };
+        
+        r.userData = {
+          type: 'rock',
+          isObstacle: true
+        };
+        
         obstacles.push(r);
         window.ground.add(r);
         created.push(r);
       }
     }
+
     return { z: zIndex, type: 'safe', meshes: created };
   }
 
   function addRoadSegment(zIndex) {
     const tileW = CONFIG.lanes * CONFIG.laneWidth + 4.0;
-    const plane = new THREE.Mesh(new THREE.BoxGeometry(tileW, 0.3, CONFIG.tile), materials.road);
+    const plane = new THREE.Mesh(
+      new THREE.BoxGeometry(tileW, 0.3, CONFIG.tile), 
+      materials.road
+    );
     plane.position.set(0, -0.15, -zIndex * CONFIG.tile);
     plane.receiveShadow = true;
     window.ground.add(plane);
+
     const created = [plane];
+
     const lineGeo = new THREE.BoxGeometry(0.15, 0.05, CONFIG.tile * 0.4);
-    for (let lane = -Math.floor(CONFIG.lanes/2); lane < Math.floor(CONFIG.lanes/2); lane++) {
+    for (let lane = -Math.floor(CONFIG.lanes / 2); lane < Math.floor(CONFIG.lanes / 2); lane++) {
       const line = new THREE.Mesh(lineGeo, materials.roadLine);
-      line.position.set((lane+0.5)*CONFIG.laneWidth, 0.05, -zIndex*CONFIG.tile);
-      window.ground.add(line); created.push(line);
+      line.position.set(
+        (lane + 0.5) * CONFIG.laneWidth, 
+        0.05, 
+        -zIndex * CONFIG.tile
+      );
+      window.ground.add(line);
+      created.push(line);
     }
+
     const direction = Math.random() < 0.5 ? 1 : -1;
     const lanesArray = [];
-    for (let lane = -Math.floor(CONFIG.lanes/2); lane <= Math.floor(CONFIG.lanes/2); lane++) lanesArray.push(lane);
+    for (let lane = -Math.floor(CONFIG.lanes / 2); lane <= Math.floor(CONFIG.lanes / 2); lane++) {
+      lanesArray.push(lane);
+    }
+
     lanesArray.sort(() => Math.random() - 0.5);
+
     for (const lane of lanesArray) {
       if (Math.random() < CONFIG.obstacles.spawnProb * difficultyMultiplier && carModels.length > 0) {
-        const carIndex = Math.floor(Math.random()*carModels.length);
+        const carIndex = Math.floor(Math.random() * carModels.length);
         const carClone = carModels[carIndex].clone();
-        carClone.position.set(lane * CONFIG.laneWidth, 0, -zIndex * CONFIG.tile);
-        if (direction < 0) carClone.rotation.y += Math.PI;
-        carClone.userData = { type: 'car', speed: THREE.MathUtils.lerp(CONFIG.obstacles.carSpeedMin, CONFIG.obstacles.carSpeedMax, Math.random()) * difficultyMultiplier, dir: direction };
+        
+        carClone.position.set(
+          lane * CONFIG.laneWidth,
+          0,
+          -zIndex * CONFIG.tile
+        );
+
+        if (direction < 0) {
+          carClone.rotation.y += Math.PI;
+        }
+
+        carClone.userData = {
+          type: 'car',
+          speed: THREE.Math.lerp(  // CORREGIDO: THREE.Math.lerp en lugar de THREE.MathUtils.lerp
+            CONFIG.obstacles.carSpeedMin,
+            CONFIG.obstacles.carSpeedMax,
+            Math.random()
+          ) * difficultyMultiplier,
+          dir: direction
+        };
+
         obstacles.push(carClone);
         window.ground.add(carClone);
         created.push(carClone);
         break;
       }
     }
+
     return { z: zIndex, type: 'road', meshes: created };
   }
 
@@ -640,7 +1185,9 @@
   function onKey(e) {
     if (!gameStarted) {
       if (e.code === 'Enter' || e.code === 'Space') {
-        if (startScreen.style.display !== 'none') startGame();
+        if (startScreen.style.display !== 'none') {
+          startGame();
+        }
       }
       return;
     }
@@ -649,17 +1196,38 @@
 
   function handleMove(code) {
     if (isMoving || !gameStarted || !player) return;
+    
     const step = CONFIG.tile;
     let nx = player.position.x;
     let nz = player.position.z;
     let moved = false;
-    if (code === 'KeyW' || code === 'ArrowUp') { nz -= step; moved = true; }
-    else if (code === 'KeyS' || code === 'ArrowDown') { nz += step; moved = true; }
-    else if (code === 'KeyA' || code === 'ArrowLeft') { nx -= CONFIG.laneWidth; moved = true; }
-    else if (code === 'KeyD' || code === 'ArrowRight') { nx += CONFIG.laneWidth; moved = true; }
+
+    if (code === 'KeyW' || code === 'ArrowUp') {
+      nz -= step;
+      moved = true;
+    } else if (code === 'KeyS' || code === 'ArrowDown') {
+      nz += step;
+      moved = true;
+    } else if (code === 'KeyA' || code === 'ArrowLeft') {
+      nx -= CONFIG.laneWidth;
+      moved = true;
+    } else if (code === 'KeyD' || code === 'ArrowRight') {
+      nx += CONFIG.laneWidth;
+      moved = true;
+    }
+
     if (!moved) return;
-    const maxLane = Math.floor(CONFIG.lanes/2) * CONFIG.laneWidth;
+
+    const maxLane = Math.floor(CONFIG.lanes / 2) * CONFIG.laneWidth;
     nx = Math.max(-maxLane, Math.min(maxLane, nx));
+
+    if (navBounds.minX !== null) {
+      nx = Math.max(navBounds.minX, Math.min(navBounds.maxX, nx));
+    }
+    if (navBounds.minZ !== null) {
+      nz = Math.max(navBounds.minZ, Math.min(navBounds.maxZ, nz));
+    }
+
     isMoving = true;
     moveStart = performance.now();
     moveFrom.copy(player.position);
@@ -676,7 +1244,7 @@
     const dir = new THREE.Vector3().subVectors(moveTo, moveFrom);
     if (dir.lengthSq() > 0) {
       const targetRot = Math.atan2(dir.x, dir.z);
-      const startRot = player.rotation.y || 0;
+      const startRot = player.rotation.y;
       const rotDiff = ((targetRot - startRot + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       player.userData.rotAnim = { start: startRot, diff: rotDiff };
     }
@@ -684,12 +1252,16 @@
 
   // ============ GAME LOOP ============
   function gameLoop() {
+    if (!gameStarted) {
+      renderer.render(scene, camera);
+      return;
+    }
+    
     const dt = clock.getDelta();
 
-    if (mixer) mixer.update(dt);
-
-    // VR input
-    processVRInput(dt);
+    if (mixer) {
+      mixer.update(dt);
+    }
 
     if (isMoving && player) {
       const elapsed = performance.now() - moveStart;
@@ -708,6 +1280,7 @@
       if (t >= 1) {
         isMoving = false;
         player.position.y = 0;
+        
         if (animations.idle) {
           if (currentAction !== animations.idle) {
             if (currentAction) currentAction.fadeOut(0.3);
@@ -715,52 +1288,79 @@
             currentAction.reset().fadeIn(0.3).play();
           }
         }
+
         if (moveTo.z < moveFrom.z) {
           distance += 1;
           score += CONFIG.pointsPerMove;
           distUI.textContent = distance;
           scoreUI.textContent = score;
-          if (distance > 0 && distance % CONFIG.levelThreshold === 0) levelUp();
+
+          if (distance > 0 && distance % CONFIG.levelThreshold === 0) {
+            levelUp();
+          }
         }
+
         refreshSegments();
       }
     }
 
-    // Move car obstacles
     for (const o of obstacles) {
       if (!o.userData || o.userData.type !== 'car') continue;
+      
       const dir = o.userData.dir || 1;
       const speed = o.userData.speed || 2.0;
       o.position.x += dir * speed * dt;
+
       const maxX = (CONFIG.lanes / 2) * CONFIG.laneWidth + 5;
-      if (o.position.x > maxX) o.position.x = -maxX;
-      if (o.position.x < -maxX) o.position.x = maxX;
+      if (o.position.x > maxX) {
+        o.position.x = -maxX;
+      }
+      if (o.position.x < -maxX) {
+        o.position.x = maxX;
+      }
     }
 
     checkCollisions();
 
-    // Camera follow when not presenting or keep camera in player while presenting
+    // VR input
+    processVRInput(dt);
+
     if (player) {
-      if (!renderer.xr.isPresenting) {
-        // third-person overhead when not in VR
-        const targetCam = new THREE.Vector3(player.position.x * 0.3, 12, player.position.z + 16);
-        camera.position.lerp(targetCam, 0.1);
-        camera.lookAt(new THREE.Vector3(player.position.x * 0.2, 0, player.position.z - 3));
+      if (renderer.xr && renderer.xr.isPresenting && vrRig) {
+        const targetRigPos = new THREE.Vector3(player.position.x, 0, player.position.z);
+        vrRig.position.lerp(targetRigPos, 0.15);
       } else {
-        // In VR the camera is parented to player; ensure camera position is eye height
-        camera.position.set(0, 1.6, 0);
+        const targetCam = new THREE.Vector3(
+          player.position.x,
+          1.6,
+          player.position.z + 0.2
+        );
+        camera.position.lerp(targetCam, 0.1);
+        const lookAt = new THREE.Vector3(
+          player.position.x,
+          1.6,
+          player.position.z - 1.0
+        );
+        camera.lookAt(lookAt);
       }
     }
 
     renderer.render(scene, camera);
   }
 
-  // ============ COLLISIONS & GAME EVENTS ============
+  function animate() {
+    renderer.setAnimationLoop(gameLoop);
+  }
+
+  // ============ COLLISION DETECTION ============
   function checkCollisions() {
     if (!player || player.userData.invincible) return;
+
     const playerBox = new THREE.Box3().setFromObject(player);
+    
     for (const o of obstacles) {
       if (!o.parent || !o.userData) continue;
+      
       if (o.userData.type === 'car' || o.userData.isObstacle) {
         const obstacleBox = new THREE.Box3().setFromObject(o);
         if (playerBox.intersectsBox(obstacleBox)) {
@@ -771,12 +1371,21 @@
     }
   }
 
+  // ============ GAME EVENTS ============
   function onHit() {
-    if (player.userData.hitCooldown && performance.now() - player.userData.hitCooldown < 1500) return;
+    if (player.userData.hitCooldown && 
+        performance.now() - player.userData.hitCooldown < 1500) return;
+    
     player.userData.hitCooldown = performance.now();
     player.userData.invincible = true;
+    
     lives--;
     livesUI.textContent = lives;
+
+    if (collisionSound && collisionSound.buffer) {
+      if (collisionSound.isPlaying) collisionSound.stop();
+      collisionSound.play();
+    }
 
     if (animations.death && mixer) {
       if (currentAction) currentAction.fadeOut(0.1);
@@ -785,6 +1394,7 @@
       currentAction.setLoop(THREE.LoopOnce);
       currentAction.clampWhenFinished = true;
       currentAction.fadeIn(0.1).play();
+      
       setTimeout(() => {
         if (lives > 0 && animations.idle) {
           if (currentAction) currentAction.fadeOut(0.3);
@@ -795,20 +1405,27 @@
     }
 
     if (playerModel) {
-      playerModel.traverse(child => {
+      playerModel.traverse((child) => {
         if (child.isMesh && child.material) {
           const originalMat = child.material;
           child.userData.originalMaterial = originalMat.clone();
           child.material = child.material.clone();
           child.material.color.setHex(0xff0000);
           child.material.emissive.setHex(0xff0000);
-          setTimeout(() => { if (child.userData.originalMaterial) child.material = child.userData.originalMaterial; }, 300);
+          
+          setTimeout(() => {
+            if (child.userData.originalMaterial) {
+              child.material = child.userData.originalMaterial;
+            }
+          }, 300);
         }
       });
     }
 
     if (lives <= 0) {
-      setTimeout(() => endGame(), 1500);
+      setTimeout(() => {
+        endGame();
+      }, 1500);
     } else {
       setTimeout(() => {
         player.position.set(0, 0, player.position.z + CONFIG.tile * 2);
@@ -824,9 +1441,12 @@
     score += CONFIG.pointsPerLevel;
     levelUI.textContent = level;
     scoreUI.textContent = score;
+    
     difficultyMultiplier = 1 + (level - 1) * 0.15;
+    
     levelIndicator.style.transform = 'translateX(-50%) scale(1.3)';
     levelIndicator.style.background = 'linear-gradient(135deg, rgba(251, 191, 36, 0.8) 0%, rgba(245, 158, 11, 0.8) 100%)';
+    
     setTimeout(() => {
       levelIndicator.style.transform = 'translateX(-50%) scale(1)';
       levelIndicator.style.background = 'linear-gradient(135deg, rgba(168, 85, 247, 0.6) 0%, rgba(139, 92, 246, 0.6) 100%)';
@@ -839,20 +1459,20 @@
     finalDist.textContent = distance;
     finalScore.textContent = score;
     finalLevel.textContent = level;
-    // stop VR loop
-    renderer.setAnimationLoop(null);
   }
 
   function refreshSegments() {
     if (!player) return;
+    
     const headZ = -Math.floor(player.position.z / CONFIG.tile);
-
-    while (segments.length === 0 || segments[segments.length - 1].z < headZ + CONFIG.segmentsAhead) {
+    
+    while (segments.length === 0 || 
+           segments[segments.length - 1].z < headZ + CONFIG.segmentsAhead) {
       const nextZ = segments.length ? segments[segments.length - 1].z + 1 : headZ;
       const seg = Math.random() < 0.6 ? addRoadSegment(nextZ) : addSafeSegment(nextZ);
       segments.push(seg);
     }
-
+    
     const minZ = headZ - CONFIG.segmentsBehind;
     while (segments.length && segments[0].z < minZ) {
       const s = segments.shift();
@@ -860,83 +1480,20 @@
         if (m.parent) m.parent.remove(m);
         if (m.geometry) m.geometry.dispose();
         if (m.material) {
-          if (Array.isArray(m.material)) m.material.forEach(mat => { if (mat.dispose) mat.dispose(); });
-          else if (m.material.dispose) m.material.dispose();
+          if (Array.isArray(m.material)) {
+            m.material.forEach(mat => {
+              if (mat.dispose) mat.dispose();
+            });
+          } else {
+            if (m.material.dispose) m.material.dispose();
+          }
         }
       }
     }
+    
     obstacles = obstacles.filter(o => o.parent);
+    updateNavigationBounds();
   }
-
-  // Poll for VR session start to attach camera to player & controllers
-  // We listen to renderer.xr for session start/end
-  renderer && (function listenXR() {
-    try {
-      renderer.xr.addEventListener('sessionstart', () => {
-        // ensure controllers attached
-        attachControllersIfReady();
-
-        // parent camera to player for first-person
-        if (player && camera) {
-          player.add(camera);
-          camera.position.set(0, 1.6, 0);
-        }
-
-        // hide player model meshes in VR
-        if (player) {
-          player.traverse(obj => {
-            if (obj.isMesh) {
-              if (obj.userData._origVis === undefined) obj.userData._origVis = obj.visible;
-              obj.visible = false;
-            }
-          });
-        }
-
-        // start loop (ensure setAnimationLoop active)
-        renderer.setAnimationLoop(gameLoop);
-      });
-
-      renderer.xr.addEventListener('sessionend', () => {
-        // restore camera to scene root
-        try {
-          if (camera.parent && camera.parent.remove) camera.parent.remove(camera);
-          scene.add(camera);
-          camera.position.set(0, 12, 16);
-        } catch (e) {}
-
-        // restore player model visibility
-        if (player) {
-          player.traverse(obj => {
-            if (obj.isMesh && obj.userData._origVis !== undefined) obj.visible = obj.userData._origVis;
-          });
-        }
-
-        // stop VR animation loop
-        renderer.setAnimationLoop(gameLoop);
-      });
-    } catch (e) {
-      // ignore if no xr support yet
-    }
-  })();
-
-  // Ensure animate runs when not in VR (fallback)
-  // Use requestAnimationFrame loop that calls gameLoop-render for non-VR usage
-  (function nonVrLoop(){
-    let running = true;
-    function tick() {
-      if (!running) return;
-      if (!renderer.xr.isPresenting) gameLoop();
-      requestAnimationFrame(tick);
-    }
-    tick();
-  })();
-
-  // Expose handleMove globally so module-less controller code can call it
-  window.handleMove = handleMove;
-
-  // final note: attach controllers if already available
-  setTimeout(() => attachControllersIfReady(), 1000);
-
   </script>
 </body>
 </html>
