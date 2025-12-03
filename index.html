@@ -1,0 +1,442 @@
+<script type="module">
+/**
+ * Migración Three.js -> WebXR VR (Primera persona) para Meta Quest 3
+ * - Mantiene rutas: TEXTURAS/, rgbe/, Models/
+ * - Cámara en primera persona: altura Y = 1.6
+ * - Controles por joystick de los mandos VR
+ * - Render de controladores 3D
+ * - Audio: rgbe/song.wav (fondo), rgbe/punch.wav (colisión)
+ *
+ * Notas: ajustar versiones CDN si es necesario; si tu proyecto ya carga Three.js y loaders localmente,
+ * reemplaza los imports por las rutas locales.
+ */
+
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/FBXLoader.js';
+import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/webxr/VRButton.js';
+import { XRControllerModelFactory } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/webxr/XRControllerModelFactory.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+
+let renderer, scene, camera;
+let player; // Object3D that represents the player's "body" and holds camera at eye height.
+const PLAYER_EYE_HEIGHT = 1.6;
+let clock = new THREE.Clock();
+
+const SEGMENT_LENGTH = 10; // longitud de cada segmento (ajusta a tu juego)
+const segments = []; // lista de segmentos
+
+// límites rígidos del área de juego (ajusta según tu mundo)
+const BOUNDS = {
+  minX: -10,
+  maxX: 10,
+  minZ: -50,
+  maxZ: 50
+};
+
+// loaders
+const textureLoader = new THREE.TextureLoader();
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+
+// audio
+let listener, bgMusic, punchSound;
+
+// controlador xr
+let controller1, controller2, controllerGrip1, controllerGrip2;
+const controllerModelFactory = new XRControllerModelFactory();
+
+// Variables para la lógica de movimiento
+let velocity = new THREE.Vector3(0, 0, 0);
+const MOVE_SPEED = 3.0; // metros por segundo
+const STRAFE_SPEED = 2.5;
+const SMOOTHING = 0.85; // suaviza la entrada del joystick
+
+init();
+animate();
+
+/* ===========================
+   Inicialización de la escena
+   =========================== */
+function init() {
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  // Agregar botón VR
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  // Scene
+  scene = new THREE.Scene();
+  // Ambiente oscuro por default para temática nocturna
+  scene.background = new THREE.Color(0x06060a);
+
+  // Camera: la cámara va a estar dentro del objeto `player`
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
+
+  // Player object: mueve al jugador y limita su posición
+  player = new THREE.Object3D();
+  player.position.set(0, PLAYER_EYE_HEIGHT, 0); // altura de los ojos
+  player.add(camera);
+  scene.add(player);
+
+  // Luz principal tenue (temática oscura)
+  const hemi = new THREE.HemisphereLight(0x444444, 0x080820, 0.7);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  dir.position.set(5, 10, 7);
+  scene.add(dir);
+
+  // Floor / Terreno básico usando tus texturas (grass/road)
+  createInitialTerrain();
+
+  // Carga entorno HDR si está disponible y PMREM (intentar usar rgbe/wide_street_4k.hdr)
+  tryLoadHDR('rgbe/wide_street_4k.hdr');
+
+  // Obtener audio listener y sonidos
+  initAudio();
+
+  // Controladores XR (detecta mandos y renderiza modelos)
+  setupXRControllers();
+
+  // Generación inicial de segmentos (mantiene la lógica original)
+  for (let i = 0; i < 12; i++) generateSegment(i);
+
+  // Eventos
+  window.addEventListener('resize', onWindowResize);
+
+  // Debug: OrbitControls para testing en escritorio (no en VR)
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, PLAYER_EYE_HEIGHT, 0);
+  controls.update();
+}
+
+/* ===========================
+   Funciones auxiliares
+   =========================== */
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function tryLoadHDR(hdrPath) {
+  // Intentamos cargar HDR usando RGBELoader (si no existe, caemos a sky oscuro)
+  // Para mantener la respuesta simple, no importo RGBELoader por defecto: si en tu proyecto
+  // ya lo tienes, puedes habilitarlo aquí.
+  // Si deseas, te dejo este bloque para activar si agregas RGBELoader:
+  //
+  // import { RGBELoader } from 'https://.../examples/jsm/loaders/RGBELoader.js';
+  // new RGBELoader().load(hdrPath, (tex) => { ... })
+  //
+  // Por ahora, dejamos la escena con fondo oscuro o un skybox si lo prefieres.
+  console.log('Intentando cargar HDR en:', hdrPath, '- si existe en rgbe/ se aplicará manualmente (agrega RGBELoader si deseas).');
+}
+
+/* ===========================
+   Terreno y texturas
+   =========================== */
+function createInitialTerrain() {
+  // Cargar texturas necesarias desde TEXTURAS/ (usa nombres originales)
+  const grassTex = textureLoader.load('TEXTURAS/grass.png');
+  const roadTex = textureLoader.load('TEXTURAS/road.png');
+  const rockTex = textureLoader.load('TEXTURAS/rock.png');
+  const woodTex = textureLoader.load('TEXTURAS/wood.png');
+
+  // Asegurar encoding y repeats
+  [grassTex, roadTex, rockTex, woodTex].forEach(t => {
+    if (t) {
+      t.encoding = THREE.sRGBEncoding;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    }
+  });
+
+  // Crear un plano grande que actúe como terreno base (textura grass)
+  const groundGeo = new THREE.PlaneGeometry(200, 200);
+  const groundMat = new THREE.MeshStandardMaterial({ map: grassTex });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotateX(-Math.PI / 2);
+  ground.receiveShadow = true;
+  ground.position.y = 0; // altura del suelo
+  scene.add(ground);
+
+  // Banda de camino (ejemplo)
+  const roadGeo = new THREE.PlaneGeometry(20, 200);
+  const roadMat = new THREE.MeshStandardMaterial({ map: roadTex });
+  const road = new THREE.Mesh(roadGeo, roadMat);
+  road.rotateX(-Math.PI / 2);
+  road.position.set(0, 0.01, 0);
+  scene.add(road);
+
+  // Opcional: añadir bordes con rock/wood para decoración
+  const edgeGeo = new THREE.BoxGeometry(1, 1, 20);
+  const leftEdge = new THREE.Mesh(edgeGeo, new THREE.MeshStandardMaterial({ map: rockTex }));
+  leftEdge.position.set(-10.5, 0.5, 0);
+  scene.add(leftEdge);
+  const rightEdge = leftEdge.clone();
+  rightEdge.position.set(10.5, 0.5, 0);
+  scene.add(rightEdge);
+}
+
+/* ===========================
+   Audio: música de fondo y efectos
+   =========================== */
+function initAudio() {
+  listener = new THREE.AudioListener();
+  camera.add(listener);
+  bgMusic = new THREE.Audio(listener);
+  punchSound = new THREE.Audio(listener);
+
+  const audioLoader = new THREE.AudioLoader();
+  // Música de fondo: rgbe/song.wav
+  audioLoader.load('rgbe/song.wav',
+    (buffer) => {
+      bgMusic.setBuffer(buffer);
+      bgMusic.setLoop(true);
+      bgMusic.setVolume(0.4);
+      // start playing when entering VR — mejor iniciar en evento de sesión
+      // pero podemos intentar reproducir cuando se carga (algunos navegadores bloquean autoplay)
+      try { bgMusic.play(); } catch (e) { console.log('Autoplay de bgMusic bloqueado, se activará al entrar a VR o al interactuar.'); }
+    },
+    undefined,
+    (err) => { console.warn('No se pudo cargar rgbe/song.wav', err); }
+  );
+
+  // Efecto punch: rgbe/punch.wav
+  audioLoader.load('rgbe/punch.wav',
+    (buffer) => {
+      punchSound.setBuffer(buffer);
+      punchSound.setLoop(false);
+      punchSound.setVolume(0.8);
+    },
+    undefined,
+    (err) => { console.warn('No se pudo cargar rgbe/punch.wav', err); }
+  );
+}
+
+/* ===========================
+   Controladores XR y mapas de entrada de joystick
+   =========================== */
+function setupXRControllers() {
+  // Controller 1 - input source 0
+  controller1 = renderer.xr.getController(0);
+  controller1.addEventListener('connected', function (event) {
+    controller1.userData.inputSource = event.data;
+    // Si se quiere, se puede mostrar un modelo simple
+  });
+  controller1.addEventListener('disconnected', function () {
+    delete controller1.userData.inputSource;
+  });
+  scene.add(controller1);
+
+  // Controller 2
+  controller2 = renderer.xr.getController(1);
+  controller2.addEventListener('connected', function (event) {
+    controller2.userData.inputSource = event.data;
+  });
+  controller2.addEventListener('disconnected', function () {
+    delete controller2.userData.inputSource;
+  });
+  scene.add(controller2);
+
+  // Controller grips (visual)
+  controllerGrip1 = renderer.xr.getControllerGrip(0);
+  controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+  scene.add(controllerGrip1);
+
+  controllerGrip2 = renderer.xr.getControllerGrip(1);
+  controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+  scene.add(controllerGrip2);
+
+  // Eventual interacción por botones (ejemplo: reproducir música al presionar botón)
+  controller1.addEventListener('selectstart', () => {
+    if (bgMusic && !bgMusic.isPlaying) {
+      try { bgMusic.play(); } catch (e) { console.log('No se pudo reproducir bgMusic automáticamente.'); }
+    }
+  });
+}
+
+/* ===========================
+   Generación de segmentos y obstáculos
+   =========================== */
+function generateSegment(index) {
+  // Mantener la nomenclatura y estructura de generación.
+  // Aquí se crea un segmento simple: una plataforma rectangular y un obstáculo aleatorio.
+  const zPos = -index * SEGMENT_LENGTH;
+  const segmentGroup = new THREE.Group();
+  segmentGroup.position.z = zPos;
+
+  // Suelo del segmento (usa road o grass)
+  const segGeo = new THREE.BoxGeometry(12, 0.2, SEGMENT_LENGTH);
+  const roadTex = textureLoader.load('TEXTURAS/road.png');
+  roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+  roadTex.repeat.set(4, 1);
+  const segMat = new THREE.MeshStandardMaterial({ map: roadTex });
+  const segMesh = new THREE.Mesh(segGeo, segMat);
+  segMesh.position.y = 0.1;
+  segMesh.receiveShadow = true;
+  segmentGroup.add(segMesh);
+
+  // Agregar un obstáculo simple (cubo) usando wood texture
+  const obsGeo = new THREE.BoxGeometry(1.4, 1.4, 1.4);
+  const woodTex = textureLoader.load('TEXTURAS/wood.png');
+  const obsMat = new THREE.MeshStandardMaterial({ map: woodTex });
+  const obstacle = new THREE.Mesh(obsGeo, obsMat);
+  obstacle.position.set((Math.random() - 0.5) * 6, 0.7, zPos - Math.random() * (SEGMENT_LENGTH - 2));
+  obstacle.userData.isObstacle = true;
+  obstacle.castShadow = true;
+  segmentGroup.add(obstacle);
+
+  // Guardamos box3 para colisiones rápidas
+  obstacle.userData.boundingBox = new THREE.Box3().setFromObject(obstacle);
+
+  segments.push(segmentGroup);
+  scene.add(segmentGroup);
+}
+
+/* ===========================
+   Movimiento y colisiones
+   =========================== */
+function updatePlayerMovement(dt) {
+  // Leer input de mandos XR (joysticks)
+  // En WebXR, los controllers pueden exponer `gamepad.axes`.
+  // Hacemos chequeo robusto para distintos mapeos:
+  const inputSources = renderer.xr.getSession() ? renderer.xr.getSession().inputSources : [];
+
+  // Default input
+  let moveForward = 0; // + adelante en -Z (avanzar)
+  let moveSide = 0; // lateral X
+
+  // Iterar entradas y priorizar joystick del primer gamepad detectado
+  for (const src of inputSources) {
+    if (!src.gamepad || !src.handedness) continue;
+    const gp = src.gamepad;
+    const axes = gp.axes || [];
+    // Heurística: stick principal suele estar en axes[2,3] para algunos controladores, o [0,1]
+    // Verificamos posibilidades:
+    let axX = 0, axY = 0;
+    if (axes.length >= 4) {
+      // Probable mapping: [xLeft, yLeft, xRight, yRight] o similar
+      axX = axes[2] !== undefined ? axes[2] : axes[0];
+      axY = axes[3] !== undefined ? axes[3] : axes[1];
+    } else if (axes.length >= 2) {
+      axX = axes[0];
+      axY = axes[1];
+    }
+    // Normalmente: Y negativo = adelante, Y positivo = atrás (ajusta según comportamiento de tu mando)
+    // Tomamos eje Y como avance en Z
+    moveForward += -axY; // invertimos para que empuje hacia adelante
+    moveSide += axX;
+    // Solo usamos la primera fuente con gamepad útil
+    break;
+  }
+
+  // Suavizado de la velocidad (para evitar cambios bruscos)
+  const targetZ = THREE.MathUtils.clamp(moveForward, -1, 1) * MOVE_SPEED;
+  const targetX = THREE.MathUtils.clamp(moveSide, -1, 1) * STRAFE_SPEED;
+  velocity.x = THREE.MathUtils.lerp(velocity.x, targetX, 1 - Math.pow(SMOOTHING, dt * 60));
+  velocity.z = THREE.MathUtils.lerp(velocity.z, targetZ, 1 - Math.pow(SMOOTHING, dt * 60));
+
+  // Aplicar movimiento relativo a la orientación del jugador/cámara (avanzar hacia -Z local)
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+
+  const deltaPos = new THREE.Vector3();
+  deltaPos.addScaledVector(forward, velocity.z * dt);
+  deltaPos.addScaledVector(right, velocity.x * dt);
+
+  player.position.add(deltaPos);
+
+  // Limitar posición al área de juego
+  player.position.x = THREE.MathUtils.clamp(player.position.x, BOUNDS.minX, BOUNDS.maxX);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, BOUNDS.minZ, BOUNDS.maxZ);
+}
+
+/* Colisiones: comprobación simple AABB entre player y obstáculos */
+function checkCollisions() {
+  // Crear bounding box para el "cuerpo" del jugador (una caja alrededor de la cámara)
+  const playerBox = new THREE.Box3().setFromCenterAndSize(
+    new THREE.Vector3(player.position.x, PLAYER_EYE_HEIGHT / 2, player.position.z),
+    new THREE.Vector3(1.0, 1.6, 1.0) // ancho, alto, profundidad de la "cápsula" del jugador (aprox.)
+  );
+
+  for (const seg of segments) {
+    seg.traverse((child) => {
+      if (child.userData && child.userData.isObstacle) {
+        // actualizar bounding box del obstáculo
+        child.userData.boundingBox.setFromObject(child);
+        if (playerBox.intersectsBox(child.userData.boundingBox)) {
+          // colisión detectada: reproducir sonido de punch
+          if (punchSound && !punchSound.isPlaying) punchSound.play();
+          // lógica de colisión (por ejemplo, restar vida o retroceso)
+          // empujar al jugador un poco hacia atrás
+          const push = new THREE.Vector3();
+          push.subVectors(player.position, child.position).setY(0).normalize().multiplyScalar(0.6);
+          player.position.add(push);
+        }
+      }
+    });
+  }
+}
+
+/* ===========================
+   Animación principal
+   =========================== */
+function animate() {
+  renderer.setAnimationLoop(render);
+}
+
+function render(timestamp, xrFrame) {
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  // si estamos en sesión XR, actualizar posiciones relativas (la cámara será manejada por XR)
+  // pero movemos el "player" que contiene la cámara para desplazar la vista.
+  updatePlayerMovement(dt);
+
+  // Checar colisiones
+  checkCollisions();
+
+  // Opcional: actualizar animaciones de modelos o lógica del juego
+  // here...
+
+  renderer.render(scene, camera);
+}
+
+/* ===========================
+   Carga de modelos (ejemplo)
+   =========================== */
+function loadModelExample(path, onLoaded) {
+  // Soporta .glb y .fbx
+  const extension = path.split('.').pop().toLowerCase();
+  if (extension === 'glb' || extension === 'gltf') {
+    gltfLoader.load(path, (g) => {
+      const model = g.scene || g;
+      onLoaded(model);
+    }, undefined, (err) => console.error('Error al cargar glb:', err));
+  } else if (extension === 'fbx') {
+    fbxLoader.load(path, (obj) => {
+      onLoaded(obj);
+    }, undefined, (err) => console.error('Error al cargar fbx:', err));
+  } else {
+    console.warn('Formato no soportado en loadModelExample:', extension);
+  }
+}
+
+/* ===========================
+   Sugerencias / puntos a revisar después de integrar
+   ===========================
+   1. Si tu proyecto ya incluía loaders y controladores locales, reemplaza imports CDN por tus rutas locales.
+   2. Si quieres un cielo nocturno más realista, añade RGBELoader y aplica el HDR (rgbe/wide_street_4k.hdr) como environment usando PMREMGenerator.
+   3. Ajusta los BOUNDS a las dimensiones reales que genera tu lógica de segmentos.
+   4. Si tus modelos (Models/*.glb / *.fbx) tienen animaciones, carga las animaciones y vincula un AnimationMixer por modelo.
+   5. Mapeo del joystick: los ejes pueden variar por firmware del visor. Si notas inversión o ejes distintos,
+      imprime `session.inputSources` y `gamepad.axes` en la consola durante la sesión XR para calibrarlo.
+   6. Para mejorar rendimiento en Quest 3: reducir geometrías, usar texturas comprimidas (KTX2), y limitar luces dinámicas.
+*/
+
+</script>
