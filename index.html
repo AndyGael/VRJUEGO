@@ -300,18 +300,17 @@
 
   <!-- Three.js + loaders -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+  <!-- Eliminamos RGBELoader para cargar más rápido -->
 
   <script>
   // ============ CONFIGURATION ============
   const CONFIG = {
     tile: 2.0,
     segmentLength: 10,
-    segmentsAhead: 18,
-    segmentsBehind: 8,
+    segmentsAhead: 12, // Reducido para mejor rendimiento
+    segmentsBehind: 6,
     lanes: 5,
     laneWidth: 2.0,
     player: {
@@ -346,7 +345,7 @@
   // Loaded models
   let carModels = [];
   let loadedCount = 0;
-  const totalModels = 7; // 3 cars + 1 player + HDR + 2 props
+  const totalModels = 4; // Reducido: 3 cars + 1 player (sin HDR pesado)
 
   // ============ VR / AUDIO / NAVIGATION STATE ============
   let vrRig = null;
@@ -396,7 +395,8 @@
 
   // ============ MINIMAL VR BUTTON (WebXR entry) ============
   const VRButton = {
-    createButton: function (renderer) {
+    createButton: function (renderer, options) {
+      if (!options) options = {};
       const button = document.createElement('button');
       button.style.position = 'absolute';
       button.style.bottom = '20px';
@@ -412,53 +412,89 @@
       button.style.boxShadow = '0 0 18px rgba(0,0,0,0.45)';
       button.textContent = 'Enter VR';
 
+      function showEnterVR() {
+        button.textContent = 'Enter VR';
+      }
+
+      function showExitVR() {
+        button.textContent = 'Exit VR';
+      }
+
       function showUnsupported() {
         button.textContent = 'VR no disponible';
         button.disabled = true;
         button.style.background = '#4b5563';
       }
 
-      if ('xr' in navigator) {
-        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-          if (!supported) {
-            showUnsupported();
-            return;
-          }
-          let currentSession = null;
-
-          async function onClick() {
-            if (currentSession) {
-              await currentSession.end();
-              return;
-            }
-            try {
-              const session = await navigator.xr.requestSession('immersive-vr', {
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
-              });
-              currentSession = session;
-              renderer.xr.setSession(session);
-              button.textContent = 'Exit VR';
-              session.addEventListener('end', () => {
-                currentSession = null;
-                button.textContent = 'Enter VR';
-              });
-            } catch (e) {
-              console.error('No se pudo iniciar la sesión XR', e);
-            }
-          }
-
-          button.addEventListener('click', onClick);
-        }).catch((err) => {
-          console.warn('Error comprobando XR:', err);
-          showUnsupported();
-        });
-      } else {
-        showUnsupported();
+      function showError(error) {
+        console.error(error);
+        button.textContent = 'Error VR';
+        button.disabled = true;
+        button.style.background = '#dc2626';
       }
+
+      if (!('xr' in navigator)) {
+        showUnsupported();
+        return button;
+      }
+
+      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        if (!supported) {
+          showUnsupported();
+          return;
+        }
+
+        let currentSession = null;
+
+        async function onSessionStarted(session) {
+          currentSession = session;
+          await renderer.xr.setSession(session);
+          button.textContent = 'Exit VR';
+          
+          session.addEventListener('end', onSessionEnded);
+          
+          // Configuración para Meta Quest
+          if (session.updateRenderState) {
+            session.updateRenderState({
+              baseLayer: new XRWebGLLayer(session, renderer.getContext())
+            });
+          }
+        }
+
+        function onSessionEnded() {
+          currentSession = null;
+          button.textContent = 'Enter VR';
+        }
+
+        button.addEventListener('click', async function () {
+          if (currentSession === null) {
+            try {
+              const sessionInit = { 
+                optionalFeatures: ['local-floor', 'bounded-floor']
+              };
+              const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
+              await onSessionStarted(session);
+            } catch (err) {
+              console.error('Error al iniciar sesión VR:', err);
+              showError(err);
+            }
+          } else {
+            await currentSession.end();
+          }
+        });
+      }).catch(showError);
 
       return button;
     }
   };
+
+  // ============ VERIFICACIÓN DE VR ============
+  function checkVRSupport() {
+    if ('xr' in navigator) {
+      return navigator.xr.isSessionSupported('immersive-vr');
+    }
+    return Promise.resolve(false);
+  }
 
   // ============ VR CONTROLLERS & JOYSTICK INPUT ============
   function setupVRControllers() {
@@ -467,8 +503,7 @@
     controller1 = renderer.xr.getController(0);
     controller2 = renderer.xr.getController(1);
 
-    // Geometría compatible con Three r128 (Cylindro en vez de CapsuleGeometry)
-    const controllerGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8);
+    const controllerGeom = new THREE.CapsuleGeometry(0.02, 0.08, 4, 8);
     const controllerMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0x22c55e,
@@ -476,35 +511,34 @@
     });
 
     const controllerMesh1 = new THREE.Mesh(controllerGeom, controllerMat);
-    controllerMesh1.rotation.x = Math.PI / 2;    // que apunte hacia delante
-    controllerMesh1.position.set(0, 0, -0.08);
+    controllerMesh1.position.set(0, 0, -0.05);
     controller1.add(controllerMesh1);
 
-    const controllerMesh2 = new THREE.Mesh(controllerGeom, controllerMat.clone());
-    controllerMesh2.rotation.x = Math.PI / 2;
-    controllerMesh2.position.set(0, 0, -0.08);
+    const controllerMesh2 = new THREE.Mesh(controllerGeom, controllerMat);
+    controllerMesh2.position.set(0, 0, -0.05);
     controller2.add(controllerMesh2);
 
+    // Eventos de conexión para Meta Quest
     controller1.addEventListener('connected', function (event) {
-      if (event.data && event.data.gamepad) {
-        this.userData.gamepad = event.data.gamepad;
-        controllerGamepad1 = this.userData.gamepad;
-      }
+      console.log('Controller 1 connected:', event.data);
+      this.userData.gamepad = event.data.gamepad;
+      controllerGamepad1 = this.userData.gamepad;
     });
 
     controller1.addEventListener('disconnected', function () {
+      console.log('Controller 1 disconnected');
       controllerGamepad1 = null;
       delete this.userData.gamepad;
     });
 
     controller2.addEventListener('connected', function (event) {
-      if (event.data && event.data.gamepad) {
-        this.userData.gamepad = event.data.gamepad;
-        controllerGamepad2 = this.userData.gamepad;
-      }
+      console.log('Controller 2 connected:', event.data);
+      this.userData.gamepad = event.data.gamepad;
+      controllerGamepad2 = this.userData.gamepad;
     });
 
     controller2.addEventListener('disconnected', function () {
+      console.log('Controller 2 disconnected');
       controllerGamepad2 = null;
       delete this.userData.gamepad;
     });
@@ -521,18 +555,22 @@
 
     let axisX = 0;
     let axisY = 0;
-    const pads = [];
-
-    if (controllerGamepad1 && controllerGamepad1.axes) pads.push(controllerGamepad1);
-    if (controllerGamepad2 && controllerGamepad2.axes) pads.push(controllerGamepad2);
-
-    pads.forEach((pad) => {
-      if (!pad.axes || pad.axes.length < 2) return;
-      const x = pad.axes[0];
-      const y = pad.axes[1];
-      if (Math.abs(x) > Math.abs(axisX)) axisX = x;
-      if (Math.abs(y) > Math.abs(axisY)) axisY = y;
-    });
+    
+    // Verifica gamepads activos
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    
+    for (const gamepad of gamepads) {
+      if (!gamepad) continue;
+      
+      // Meta Quest usa axes 2 y 3 para el joystick principal
+      if (gamepad.axes && gamepad.axes.length >= 4) {
+        const x = gamepad.axes[2] || 0;
+        const y = gamepad.axes[3] || 0;
+        
+        if (Math.abs(x) > Math.abs(axisX)) axisX = x;
+        if (Math.abs(y) > Math.abs(axisY)) axisY = y;
+      }
+    }
 
     const threshold = 0.45;
     let code = null;
@@ -571,6 +609,8 @@
   init();
 
   function init() {
+    console.log('Iniciando juego...');
+    
     // Scene setup (tema nocturno / survival)
     scene = new THREE.Scene();
     const nightColor = new THREE.Color(0x050816);
@@ -594,7 +634,10 @@
     scene.add(vrRig);
 
     // Renderer + WebXR
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: false 
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     renderer.shadowMap.enabled = true;
@@ -602,11 +645,24 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.6;
     renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    // Configuración WebXR para Meta Quest
     renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local-floor'); // Importante para Quest
+    
     document.body.appendChild(renderer.domElement);
 
     const vrButton = VRButton.createButton(renderer);
     document.body.appendChild(vrButton);
+
+    // Verifica soporte VR
+    checkVRSupport().then((supported) => {
+      if (supported) {
+        console.log('VR is supported on this device');
+      } else {
+        console.warn('VR is not supported on this device');
+      }
+    });
 
     // Iluminación nocturna
     const hemi = new THREE.HemisphereLight(0x555577, 0x050509, 0.8);
@@ -619,79 +675,118 @@
     sun.shadow.camera.right = 30;
     sun.shadow.camera.top = 30;
     sun.shadow.camera.bottom = -30;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
+    sun.shadow.mapSize.width = 1024; // Reducido para mejor rendimiento
+    sun.shadow.mapSize.height = 1024;
     scene.add(sun);
 
-    // Texturas desde TEXTURAS/
-    const grassTex = textureLoader.load('TEXTURAS/grass.png');
-    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.anisotropy = 4;
-
-    const roadTex = textureLoader.load('TEXTURAS/road.png');
-    roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
-    roadTex.anisotropy = 4;
-
-    const woodTex = textureLoader.load('TEXTURAS/wood.png');
-    woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
-    woodTex.anisotropy = 4;
-
-    const rockTex = textureLoader.load('TEXTURAS/rock.png');
-    rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping;
-    rockTex.anisotropy = 4;
-
-    // Materials usando SOLO las texturas
-    materials.grass = new THREE.MeshStandardMaterial({ 
-      map: grassTex,
-      roughness: 0.9,
-      metalness: 0.0
-    });
+    // Texturas desde TEXTURAS/ - con manejo de errores
+    let texturesLoaded = 0;
+    const totalTextures = 4;
     
-    materials.road = new THREE.MeshStandardMaterial({ 
-      map: roadTex,
-      roughness: 0.85,
-      metalness: 0.05
-    });
-    
-    materials.roadLine = new THREE.MeshStandardMaterial({ 
-      color: 0xfbbf24,
-      emissive: 0xfbbf24,
-      emissiveIntensity: 0.3,
-      roughness: 0.7,
-      metalness: 0.0
-    });
-    
-    materials.log = new THREE.MeshStandardMaterial({ 
-      map: woodTex,
-      roughness: 0.8,
-      metalness: 0.1
-    });
-    
-    materials.rock = new THREE.MeshStandardMaterial({ 
-      map: rockTex,
-      roughness: 1.0,
-      metalness: 0
-    });
+    function onTextureLoaded() {
+      texturesLoaded++;
+      if (texturesLoaded === totalTextures) {
+        console.log('Todas las texturas cargadas');
+      }
+    }
 
-    // Audio
+    function onTextureError(name, error) {
+      console.warn(`Error cargando textura ${name}:`, error);
+      onTextureLoaded(); // Contar como cargada para continuar
+    }
+
+    // Cargar texturas con manejo de errores
+    try {
+      const grassTex = textureLoader.load('TEXTURAS/grass.png', onTextureLoaded, undefined, 
+        (error) => onTextureError('grass.png', error));
+      grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+      grassTex.anisotropy = 2;
+
+      const roadTex = textureLoader.load('TEXTURAS/road.png', onTextureLoaded, undefined,
+        (error) => onTextureError('road.png', error));
+      roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+      roadTex.anisotropy = 2;
+
+      const woodTex = textureLoader.load('TEXTURAS/wood.png', onTextureLoaded, undefined,
+        (error) => onTextureError('wood.png', error));
+      woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
+      woodTex.anisotropy = 2;
+
+      const rockTex = textureLoader.load('TEXTURAS/rock.png', onTextureLoaded, undefined,
+        (error) => onTextureError('rock.png', error));
+      rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping;
+      rockTex.anisotropy = 2;
+
+      // Materials usando SOLO las texturas
+      materials.grass = new THREE.MeshStandardMaterial({ 
+        map: grassTex,
+        roughness: 0.9,
+        metalness: 0.0
+      });
+      
+      materials.road = new THREE.MeshStandardMaterial({ 
+        map: roadTex,
+        roughness: 0.85,
+        metalness: 0.05
+      });
+      
+      materials.roadLine = new THREE.MeshStandardMaterial({ 
+        color: 0xfbbf24,
+        emissive: 0xfbbf24,
+        emissiveIntensity: 0.3,
+        roughness: 0.7,
+        metalness: 0.0
+      });
+      
+      materials.log = new THREE.MeshStandardMaterial({ 
+        map: woodTex,
+        roughness: 0.8,
+        metalness: 0.1
+      });
+      
+      materials.rock = new THREE.MeshStandardMaterial({ 
+        map: rockTex,
+        roughness: 1.0,
+        metalness: 0
+      });
+    } catch (error) {
+      console.error('Error configurando texturas:', error);
+      // Usar materiales básicos si hay error
+      materials.grass = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
+      materials.road = new THREE.MeshStandardMaterial({ color: 0x333333 });
+      materials.roadLine = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 0.3 });
+      materials.log = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+      materials.rock = new THREE.MeshStandardMaterial({ color: 0x666666 });
+    }
+
+    // Audio - cargar solo si existen
     audioListener = new THREE.AudioListener();
     camera.add(audioListener);
     audioLoader = new THREE.AudioLoader();
     bgMusic = new THREE.Audio(audioListener);
     collisionSound = new THREE.Audio(audioListener);
 
-    audioLoader.load('rgbe/song.wav', (buffer) => {
-      bgMusic.setBuffer(buffer);
-      bgMusic.setLoop(true);
-      bgMusic.setVolume(0.35);
-      if (gameStarted && !bgMusic.isPlaying) bgMusic.play();
-    });
+    // Cargar audio con manejo de errores
+    try {
+      audioLoader.load('rgbe/song.wav', (buffer) => {
+        bgMusic.setBuffer(buffer);
+        bgMusic.setLoop(true);
+        bgMusic.setVolume(0.35);
+        if (gameStarted && !bgMusic.isPlaying) bgMusic.play();
+      }, undefined, (error) => {
+        console.warn('No se pudo cargar la música:', error);
+      });
 
-    audioLoader.load('rgbe/punch.wav', (buffer) => {
-      collisionSound.setBuffer(buffer);
-      collisionSound.setLoop(false);
-      collisionSound.setVolume(0.9);
-    });
+      audioLoader.load('rgbe/punch.wav', (buffer) => {
+        collisionSound.setBuffer(buffer);
+        collisionSound.setLoop(false);
+        collisionSound.setVolume(0.9);
+      }, undefined, (error) => {
+        console.warn('No se pudo cargar sonido de colisión:', error);
+      });
+    } catch (error) {
+      console.warn('Error cargando audio:', error);
+    }
 
     // Ground container
     window.ground = new THREE.Group();
@@ -700,8 +795,7 @@
     // VR controllers
     setupVRControllers();
 
-    // Load HDR environment and models
-    loadHDREnvironment();
+    // Load models - SIN HDR pesado
     loadModels();
 
     // Event listeners
@@ -719,223 +813,210 @@
     // Start button
     startBtn.onclick = startGame;
     retryBtn.onclick = () => location.reload();
+
+    console.log('Inicialización completada, cargando modelos...');
   }
 
-  // ============ HDR ENVIRONMENT LOADING ============
-  function loadHDREnvironment() {
-    const rgbeLoader = new THREE.RGBELoader();
-    
-    rgbeLoader.load(
-      'rgbe/wide_street_4k.hdr',
-      (texture) => {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
-
-        const pmremGenerator = new THREE.PMREMGenerator(renderer);
-        pmremGenerator.compileEquirectangularShader();
-        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-        scene.environment = envMap;
-        pmremGenerator.dispose();
-
-        const nightColor = new THREE.Color(0x050816);
-        scene.background = nightColor.clone();
-        scene.fog.color.copy(nightColor);
-        renderer.toneMappingExposure = 0.6;
-
-        Object.values(materials).forEach(mat => {
-          if (mat && (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) {
-            mat.envMap = envMap;
-            mat.needsUpdate = true;
-          }
-        });
-
-        console.log('HDR environment loaded (night styling)');
-        onModelLoaded();
-      },
-      (progress) => {
-        if (progress.total > 0) {
-          const percent = (progress.loaded / progress.total) * 100;
-          console.log(`HDR loading: ${percent.toFixed(0)}%`);
-        }
-      },
-      (error) => {
-        console.warn('HDR environment not found, using fallback dark sky');
-        const nightColor = new THREE.Color(0x050816);
-        scene.background = nightColor.clone();
-        scene.fog.color.copy(nightColor);
-        onModelLoaded();
-      }
-    );
-  }
-
-  // ============ MODEL LOADING ============
+  // ============ MODEL LOADING (SIMPLIFICADO) ============
   function loadModels() {
     const gltfLoader = new THREE.GLTFLoader();
     const fbxLoader = new THREE.FBXLoader();
 
+    // Configuración de modelos de autos con rutas CORRECTAS
     const carConfigs = [
       { path: 'Models/car1.glb', scale: 1.2, rotation: Math.PI / 2 },
       { path: 'Models/car2.glb', scale: 1.0, rotation: 0 },
       { path: 'Models/coupe_car.glb', scale: 1.0, rotation: 0 }
     ];
     
+    let carsLoaded = 0;
+    
     carConfigs.forEach((config, index) => {
       gltfLoader.load(
         config.path,
         (gltf) => {
-          const model = gltf.scene;
-          
-          const box = new THREE.Box3().setFromObject(model);
-          const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const targetSize = 2.0;
-          const normalizeScale = targetSize / maxDim;
-          
-          model.scale.set(normalizeScale, normalizeScale, normalizeScale);
-          
-          if (config.rotation !== 0) {
-            model.rotation.y = config.rotation;
+          try {
+            const model = gltf.scene;
+            
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const targetSize = 2.0;
+            const normalizeScale = targetSize / maxDim;
+            
+            model.scale.set(normalizeScale, normalizeScale, normalizeScale);
+            
+            if (config.rotation !== 0) {
+              model.rotation.y = config.rotation;
+            }
+            
+            box.setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            model.position.set(-center.x, 0, -center.z);
+            
+            const wrapper = new THREE.Group();
+            wrapper.add(model);
+            
+            wrapper.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            
+            carModels.push(wrapper);
+            console.log(`✅ Cargado: ${config.path}`);
+            carsLoaded++;
+            
+            // Actualizar progreso
+            updateLoadingProgress(index, (carsLoaded / carConfigs.length) * 0.5); // 50% para autos
+            
+            if (carsLoaded === carConfigs.length) {
+              loadPlayerModel(fbxLoader);
+            }
+          } catch (error) {
+            console.error(`Error procesando ${config.path}:`, error);
+            const fallbackCar = createFallbackCar();
+            carModels.push(fallbackCar);
+            carsLoaded++;
+            updateLoadingProgress(index, (carsLoaded / carConfigs.length) * 0.5);
+            
+            if (carsLoaded === carConfigs.length) {
+              loadPlayerModel(fbxLoader);
+            }
           }
+        },
+        (progress) => {
+          // No actualizamos progreso aquí para evitar sobrecarga
+        },
+        (error) => {
+          console.error(`❌ Error cargando ${config.path}:`, error);
+          const fallbackCar = createFallbackCar();
+          carModels.push(fallbackCar);
+          carsLoaded++;
+          updateLoadingProgress(index, (carsLoaded / carConfigs.length) * 0.5);
           
-          box.setFromObject(model);
-          const center = box.getCenter(new THREE.Vector3());
-          model.position.set(-center.x, 0, -center.z);
+          if (carsLoaded === carConfigs.length) {
+            loadPlayerModel(fbxLoader);
+          }
+        }
+      );
+    });
+
+    // Si no hay modelos de autos, crear uno de respaldo y continuar
+    if (carConfigs.length === 0) {
+      carModels.push(createFallbackCar());
+      setTimeout(() => loadPlayerModel(fbxLoader), 100);
+    }
+  }
+
+  function loadPlayerModel(fbxLoader) {
+    console.log('Cargando modelo del jugador...');
+    
+    fbxLoader.load(
+      'Models/Taunt.fbx',
+      (fbx) => {
+        try {
+          playerModel = fbx;
+          playerModel.scale.set(0.01, 0.01, 0.01);
+          playerModel.position.set(0, 0, 0);
           
-          const wrapper = new THREE.Group();
-          wrapper.add(model);
-          
-          wrapper.traverse((child) => {
+          playerModel.traverse((child) => {
             if (child.isMesh) {
               child.castShadow = true;
               child.receiveShadow = true;
             }
           });
+
+          mixer = new THREE.AnimationMixer(playerModel);
           
-          carModels.push(wrapper);
-          console.log(`Loaded ${config.path} successfully`);
-          onModelLoaded();
-        },
-        (progress) => {
-          if (progress.total > 0) {
-            const percent = (progress.loaded / progress.total) * 100;
-            updateLoadingProgress(index, percent / carConfigs.length);
-          }
-        },
-        (error) => {
-          console.error(`Error loading ${config.path}:`, error);
-          const fallbackCar = createFallbackCar();
-          carModels.push(fallbackCar);
+          console.log('✅ Modelo del jugador cargado');
+          
+          // Intentar cargar animaciones
+          setTimeout(() => {
+            loadAnimationsSequentially(fbxLoader);
+          }, 100);
+          
+        } catch (error) {
+          console.error('Error procesando modelo del jugador:', error);
+          createFallbackPlayer();
           onModelLoaded();
         }
-      );
-    });
-
-    // Player
-    fbxLoader.load(
-      'Models/Taunt.fbx',
-      (fbx) => {
-        playerModel = fbx;
-        playerModel.scale.set(0.01, 0.01, 0.01);
-        playerModel.position.set(0, 0, 0);
-        
-        playerModel.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-
-        mixer = new THREE.AnimationMixer(playerModel);
-        
-        console.log('Player model loaded successfully');
-        
-        if (fbx.animations && fbx.animations.length > 0) {
-          animations.idle = mixer.clipAction(fbx.animations[0]);
-          animations.idle.setLoop(THREE.LoopRepeat);
-        }
-        
-        fbxLoader.load('Models/reposo.fbx', (anim) => {
-          if (anim.animations && anim.animations.length > 0) {
-            animations.idle = mixer.clipAction(anim.animations[0]);
-            animations.idle.setLoop(THREE.LoopRepeat);
-            console.log('External idle animation loaded');
-          }
-          loadRunAnimation(fbxLoader);
-        }, undefined, (error) => {
-          console.warn('Idle animation not found, continuing without it:', error);
-          loadRunAnimation(fbxLoader);
-        });
       },
       (progress) => {
-        if (progress.total > 0) {
-          const percent = (progress.loaded / progress.total) * 100;
-          updateLoadingProgress(3, percent / totalModels);
-        }
+        // Actualizar progreso para jugador (25% del total)
+        updateLoadingProgress(3, 0.75);
       },
       (error) => {
-        console.error('Error loading player model:', error);
-        const geometry = new THREE.BoxGeometry(1, 1.5, 0.8);
-        const material = new THREE.MeshStandardMaterial({ color: 0x22c55e });
-        playerModel = new THREE.Mesh(geometry, material);
-        playerModel.castShadow = true;
-        mixer = new THREE.AnimationMixer(playerModel);
+        console.error('❌ Error cargando modelo del jugador:', error);
+        createFallbackPlayer();
         onModelLoaded();
       }
     );
+  }
 
-    // Carga props temáticos (opcional)
-    fbxLoader.load('Models/muerte.fbx', (spooky) => {
-      console.log('Loaded thematic model muerte.fbx');
-      (spooky.scene || spooky).traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+  function loadAnimationsSequentially(fbxLoader) {
+    console.log('Cargando animaciones...');
+    
+    // Cargar animación de reposo
+    fbxLoader.load('Models/reposo.fbx', 
+      (anim) => {
+        if (anim.animations && anim.animations.length > 0) {
+          animations.idle = mixer.clipAction(anim.animations[0]);
+          animations.idle.setLoop(THREE.LoopRepeat);
+          console.log('✅ Animación idle cargada');
         }
-      });
-    }, undefined, () => {
-      console.warn('muerte.fbx not found, continuing without it');
-    });
-
-    fbxLoader.load('Models/wood box.fbx', (crate) => {
-      console.log('Loaded thematic model wood box.fbx');
-      (crate.scene || crate).traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-    }, undefined, () => {
-      console.warn('wood box.fbx not found, continuing without it');
-    });
+        // Cargar animación de correr
+        loadRunAnimation(fbxLoader);
+      }, 
+      undefined, 
+      (error) => {
+        console.warn('No se encontró animación idle:', error);
+        loadRunAnimation(fbxLoader);
+      }
+    );
   }
 
   function loadRunAnimation(fbxLoader) {
-    fbxLoader.load('Models/correr.fbx', (anim) => {
-      if (anim.animations && anim.animations.length > 0) {
-        animations.run = mixer.clipAction(anim.animations[0]);
-        animations.run.setLoop(THREE.LoopRepeat);
+    fbxLoader.load('Models/correr.fbx', 
+      (anim) => {
+        if (anim.animations && anim.animations.length > 0) {
+          animations.run = mixer.clipAction(anim.animations[0]);
+          animations.run.setLoop(THREE.LoopRepeat);
+          console.log('✅ Animación run cargada');
+        }
+        // Cargar animación de muerte
+        loadDeathAnimation(fbxLoader);
+      }, 
+      undefined, 
+      (error) => {
+        console.warn('No se encontró animación run:', error);
+        loadDeathAnimation(fbxLoader);
       }
-      loadDeathAnimation(fbxLoader);
-    }, undefined, (error) => {
-      console.warn('Run animation not found, continuing without it:', error);
-      loadDeathAnimation(fbxLoader);
-    });
+    );
   }
 
   function loadDeathAnimation(fbxLoader) {
-    fbxLoader.load('Models/muerte.fbx', (anim) => {
-      if (anim.animations && anim.animations.length > 0) {
-        animations.death = mixer.clipAction(anim.animations[0]);
-        animations.death.setLoop(THREE.LoopOnce);
-        animations.death.clampWhenFinished = true;
+    fbxLoader.load('Models/muerte.fbx', 
+      (anim) => {
+        if (anim.animations && anim.animations.length > 0) {
+          animations.death = mixer.clipAction(anim.animations[0]);
+          animations.death.setLoop(THREE.LoopOnce);
+          animations.death.clampWhenFinished = true;
+          console.log('✅ Animación death cargada');
+        }
+        onModelLoaded();
+      }, 
+      undefined, 
+      (error) => {
+        console.warn('No se encontró animación death:', error);
+        onModelLoaded();
       }
-      onModelLoaded();
-    }, undefined, (error) => {
-      console.warn('Death animation not found, continuing without it:', error);
-      onModelLoaded();
-    });
+    );
   }
 
   function createFallbackCar() {
+    console.log('Creando auto de respaldo...');
     const group = new THREE.Group();
     const bodyGeo = new THREE.BoxGeometry(1.4, 0.9, 2.2);
     const bodyMat = new THREE.MeshStandardMaterial({ 
@@ -957,15 +1038,29 @@
     return group;
   }
 
+  function createFallbackPlayer() {
+    console.log('Creando jugador de respaldo...');
+    const geometry = new THREE.CapsuleGeometry(0.4, 1.2, 4, 8);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0x22c55e,
+      emissive: 0x22c55e,
+      emissiveIntensity: 0.2
+    });
+    playerModel = new THREE.Mesh(geometry, material);
+    playerModel.castShadow = true;
+    playerModel.receiveShadow = true;
+    mixer = new THREE.AnimationMixer(playerModel);
+  }
+
   function onModelLoaded() {
     loadedCount++;
     const progress = loadedCount / totalModels;
     updateLoadingProgress(loadedCount - 1, progress);
     
-    console.log(`Loading progress: ${loadedCount}/${totalModels} (${Math.round(progress * 100)}%)`);
+    console.log(`📊 Progreso: ${loadedCount}/${totalModels} (${Math.round(progress * 100)}%)`);
 
     if (loadedCount >= totalModels) {
-      console.log('All models loaded, initializing game...');
+      console.log('✅ Todos los modelos cargados');
       finishLoading();
     }
   }
@@ -977,6 +1072,7 @@
   }
 
   function finishLoading() {
+    console.log('Finalizando carga...');
     loadingText.style.display = 'none';
     
     if (playerModel) {
@@ -995,16 +1091,19 @@
     
     setTimeout(() => {
       document.getElementById('progress').style.display = 'none';
+      console.log('✅ Juego listo para comenzar');
     }, 300);
   }
 
   // ============ GAME START ============
   function startGame() {
+    console.log('🚀 Iniciando juego...');
     startScreen.style.display = 'none';
     hud.style.display = 'flex';
     levelIndicator.style.display = 'block';
     gameStarted = true;
     
+    // Generar segmentos iniciales
     for (let i = -CONFIG.segmentsBehind; i <= CONFIG.segmentsAhead; i++) {
       const seg = (i <= 2) ? addSafeSegment(i) : 
                    (Math.random() < 0.6 ? addRoadSegment(i) : addSafeSegment(i));
@@ -1013,11 +1112,17 @@
 
     updateNavigationBounds();
 
+    // Reproducir música si está cargada
     if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
-      bgMusic.play();
+      try {
+        bgMusic.play();
+      } catch (error) {
+        console.warn('No se pudo reproducir música:', error);
+      }
     }
     
     animate();
+    console.log('🎮 Juego en ejecución');
   }
 
   // ============ SEGMENT GENERATION ============
@@ -1036,11 +1141,11 @@
     if (Math.random() < 0.3) {
       for (let i = 0; i < 2; i++) {
         const r = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3), 
+          new THREE.SphereGeometry(0.3 + Math.random() * 0.2), // Usar esfera en lugar de dodecaedro
           materials.rock
         );
         const lane = (Math.random() - 0.5) * (CONFIG.lanes - 1) * CONFIG.laneWidth;
-        r.position.set(lane, 0.4, -zIndex * CONFIG.tile + (Math.random() - 0.5));
+        r.position.set(lane, 0.3, -zIndex * CONFIG.tile + (Math.random() - 0.5));
         r.castShadow = true;
         
         r.userData = {
@@ -1069,6 +1174,7 @@
 
     const created = [plane];
 
+    // Líneas de carretera (más simples)
     const lineGeo = new THREE.BoxGeometry(0.15, 0.05, CONFIG.tile * 0.4);
     for (let lane = -Math.floor(CONFIG.lanes / 2); lane < Math.floor(CONFIG.lanes / 2); lane++) {
       const line = new THREE.Mesh(lineGeo, materials.roadLine);
@@ -1082,43 +1188,37 @@
     }
 
     const direction = Math.random() < 0.5 ? 1 : -1;
-    const lanesArray = [];
-    for (let lane = -Math.floor(CONFIG.lanes / 2); lane <= Math.floor(CONFIG.lanes / 2); lane++) {
-      lanesArray.push(lane);
-    }
+    
+    // Solo agregar un auto por segmento para mejor rendimiento
+    if (Math.random() < CONFIG.obstacles.spawnProb * difficultyMultiplier && carModels.length > 0) {
+      const carIndex = Math.floor(Math.random() * carModels.length);
+      const lane = Math.floor(Math.random() * CONFIG.lanes) - Math.floor(CONFIG.lanes / 2);
+      
+      const carClone = carModels[carIndex].clone();
+      
+      carClone.position.set(
+        lane * CONFIG.laneWidth,
+        0,
+        -zIndex * CONFIG.tile
+      );
 
-    lanesArray.sort(() => Math.random() - 0.5);
-
-    for (const lane of lanesArray) {
-      if (Math.random() < CONFIG.obstacles.spawnProb * difficultyMultiplier && carModels.length > 0) {
-        const carIndex = Math.floor(Math.random() * carModels.length);
-        const carClone = carModels[carIndex].clone();
-        
-        carClone.position.set(
-          lane * CONFIG.laneWidth,
-          0,
-          -zIndex * CONFIG.tile
-        );
-
-        if (direction < 0) {
-          carClone.rotation.y += Math.PI;
-        }
-
-        carClone.userData = {
-          type: 'car',
-          speed: THREE.MathUtils.lerp(
-            CONFIG.obstacles.carSpeedMin,
-            CONFIG.obstacles.carSpeedMax,
-            Math.random()
-          ) * difficultyMultiplier,
-          dir: direction
-        };
-
-        obstacles.push(carClone);
-        window.ground.add(carClone);
-        created.push(carClone);
-        break;
+      if (direction < 0) {
+        carClone.rotation.y += Math.PI;
       }
+
+      carClone.userData = {
+        type: 'car',
+        speed: THREE.Math.lerp(
+          CONFIG.obstacles.carSpeedMin,
+          CONFIG.obstacles.carSpeedMax,
+          Math.random()
+        ) * difficultyMultiplier,
+        dir: direction
+      };
+
+      obstacles.push(carClone);
+      window.ground.add(carClone);
+      created.push(carClone);
     }
 
     return { z: zIndex, type: 'road', meshes: created };
@@ -1253,6 +1353,7 @@
       }
     }
 
+    // Mover autos
     for (const o of obstacles) {
       if (!o.userData || o.userData.type !== 'car') continue;
       
@@ -1333,7 +1434,11 @@
 
     if (collisionSound && collisionSound.buffer) {
       if (collisionSound.isPlaying) collisionSound.stop();
-      collisionSound.play();
+      try {
+        collisionSound.play();
+      } catch (error) {
+        console.warn('No se pudo reproducir sonido de colisión:', error);
+      }
     }
 
     if (animations.death && mixer) {
@@ -1408,6 +1513,10 @@
     finalDist.textContent = distance;
     finalScore.textContent = score;
     finalLevel.textContent = level;
+    
+    if (bgMusic && bgMusic.isPlaying) {
+      bgMusic.stop();
+    }
   }
 
   function refreshSegments() {
@@ -1427,16 +1536,7 @@
       const s = segments.shift();
       for (const m of s.meshes) {
         if (m.parent) m.parent.remove(m);
-        if (m.geometry) m.geometry.dispose();
-        if (m.material) {
-          if (Array.isArray(m.material)) {
-            m.material.forEach(mat => {
-              if (mat.dispose) mat.dispose();
-            });
-          } else {
-            if (m.material.dispose) m.material.dispose();
-          }
-        }
+        // No disposamos geometrías para mejor rendimiento
       }
     }
     
