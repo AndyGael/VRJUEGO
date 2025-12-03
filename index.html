@@ -300,6 +300,7 @@
 
   <!-- Three.js + loaders -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
@@ -395,8 +396,7 @@
 
   // ============ MINIMAL VR BUTTON (WebXR entry) ============
   const VRButton = {
-    createButton: function (renderer, options) {
-      if (!options) options = {};
+    createButton: function (renderer) {
       const button = document.createElement('button');
       button.style.position = 'absolute';
       button.style.bottom = '20px';
@@ -412,86 +412,53 @@
       button.style.boxShadow = '0 0 18px rgba(0,0,0,0.45)';
       button.textContent = 'Enter VR';
 
-      function showEnterVR() {
-        button.textContent = 'Enter VR';
-      }
-
-      function showExitVR() {
-        button.textContent = 'Exit VR';
-      }
-
       function showUnsupported() {
         button.textContent = 'VR no disponible';
         button.disabled = true;
         button.style.background = '#4b5563';
       }
 
-      function showError(error) {
-        console.error(error);
-        button.textContent = 'Error VR';
-        button.disabled = true;
-        button.style.background = '#dc2626';
-      }
-
-      if (!('xr' in navigator)) {
-        showUnsupported();
-        return button;
-      }
-
-      navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-        if (!supported) {
-          showUnsupported();
-          return;
-        }
-
-        let currentSession = null;
-
-        async function onSessionStarted(session) {
-          currentSession = session;
-          await renderer.xr.setSession(session);
-          button.textContent = 'Exit VR';
-          
-          session.addEventListener('end', onSessionEnded);
-          
-          // Configuración para Meta Quest
-          session.updateRenderState({
-            baseLayer: new XRWebGLLayer(session, renderer.getContext())
-          });
-        }
-
-        function onSessionEnded() {
-          currentSession = null;
-          button.textContent = 'Enter VR';
-        }
-
-        button.addEventListener('click', async function () {
-          if (currentSession === null) {
-            try {
-              const sessionInit = { 
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
-              };
-              const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
-              await onSessionStarted(session);
-            } catch (err) {
-              showError(err);
-            }
-          } else {
-            await currentSession.end();
+      if ('xr' in navigator) {
+        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+          if (!supported) {
+            showUnsupported();
+            return;
           }
+          let currentSession = null;
+
+          async function onClick() {
+            if (currentSession) {
+              await currentSession.end();
+              return;
+            }
+            try {
+              const session = await navigator.xr.requestSession('immersive-vr', {
+                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+              });
+              currentSession = session;
+              renderer.xr.setSession(session);
+              button.textContent = 'Exit VR';
+              session.addEventListener('end', () => {
+                currentSession = null;
+                button.textContent = 'Enter VR';
+              });
+            } catch (e) {
+              console.error('No se pudo iniciar la sesión XR', e);
+            }
+          }
+
+          button.addEventListener('click', onClick);
+        }).catch((err) => {
+          console.warn('Error comprobando XR:', err);
+          showUnsupported();
         });
-      }).catch(showError);
+      } else {
+        showUnsupported();
+      }
 
       return button;
     }
   };
-
-  // ============ VERIFICACIÓN DE VR ============
-  function checkVRSupport() {
-    if ('xr' in navigator) {
-      return navigator.xr.isSessionSupported('immersive-vr');
-    }
-    return Promise.resolve(false);
-  }
 
   // ============ VR CONTROLLERS & JOYSTICK INPUT ============
   function setupVRControllers() {
@@ -500,7 +467,8 @@
     controller1 = renderer.xr.getController(0);
     controller2 = renderer.xr.getController(1);
 
-    const controllerGeom = new THREE.CapsuleGeometry(0.02, 0.08, 4, 8);
+    // Geometría compatible con Three r128 (Cylindro en vez de CapsuleGeometry)
+    const controllerGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8);
     const controllerMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0x22c55e,
@@ -508,34 +476,35 @@
     });
 
     const controllerMesh1 = new THREE.Mesh(controllerGeom, controllerMat);
-    controllerMesh1.position.set(0, 0, -0.05);
+    controllerMesh1.rotation.x = Math.PI / 2;    // que apunte hacia delante
+    controllerMesh1.position.set(0, 0, -0.08);
     controller1.add(controllerMesh1);
 
-    const controllerMesh2 = new THREE.Mesh(controllerGeom, controllerMat);
-    controllerMesh2.position.set(0, 0, -0.05);
+    const controllerMesh2 = new THREE.Mesh(controllerGeom, controllerMat.clone());
+    controllerMesh2.rotation.x = Math.PI / 2;
+    controllerMesh2.position.set(0, 0, -0.08);
     controller2.add(controllerMesh2);
 
-    // Eventos de conexión para Meta Quest
     controller1.addEventListener('connected', function (event) {
-      console.log('Controller 1 connected:', event.data);
-      this.userData.gamepad = event.data.gamepad;
-      controllerGamepad1 = this.userData.gamepad;
+      if (event.data && event.data.gamepad) {
+        this.userData.gamepad = event.data.gamepad;
+        controllerGamepad1 = this.userData.gamepad;
+      }
     });
 
     controller1.addEventListener('disconnected', function () {
-      console.log('Controller 1 disconnected');
       controllerGamepad1 = null;
       delete this.userData.gamepad;
     });
 
     controller2.addEventListener('connected', function (event) {
-      console.log('Controller 2 connected:', event.data);
-      this.userData.gamepad = event.data.gamepad;
-      controllerGamepad2 = this.userData.gamepad;
+      if (event.data && event.data.gamepad) {
+        this.userData.gamepad = event.data.gamepad;
+        controllerGamepad2 = this.userData.gamepad;
+      }
     });
 
     controller2.addEventListener('disconnected', function () {
-      console.log('Controller 2 disconnected');
       controllerGamepad2 = null;
       delete this.userData.gamepad;
     });
@@ -552,22 +521,18 @@
 
     let axisX = 0;
     let axisY = 0;
-    
-    // Verifica gamepads activos
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    
-    for (const gamepad of gamepads) {
-      if (!gamepad) continue;
-      
-      // Meta Quest usa axes 2 y 3 para el joystick principal
-      if (gamepad.axes && gamepad.axes.length >= 4) {
-        const x = gamepad.axes[2] || 0;
-        const y = gamepad.axes[3] || 0;
-        
-        if (Math.abs(x) > Math.abs(axisX)) axisX = x;
-        if (Math.abs(y) > Math.abs(axisY)) axisY = y;
-      }
-    }
+    const pads = [];
+
+    if (controllerGamepad1 && controllerGamepad1.axes) pads.push(controllerGamepad1);
+    if (controllerGamepad2 && controllerGamepad2.axes) pads.push(controllerGamepad2);
+
+    pads.forEach((pad) => {
+      if (!pad.axes || pad.axes.length < 2) return;
+      const x = pad.axes[0];
+      const y = pad.axes[1];
+      if (Math.abs(x) > Math.abs(axisX)) axisX = x;
+      if (Math.abs(y) > Math.abs(axisY)) axisY = y;
+    });
 
     const threshold = 0.45;
     let code = null;
@@ -629,10 +594,7 @@
     scene.add(vrRig);
 
     // Renderer + WebXR
-    renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: false 
-    });
+    renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     renderer.shadowMap.enabled = true;
@@ -640,24 +602,11 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.6;
     renderer.outputEncoding = THREE.sRGBEncoding;
-    
-    // Configuración WebXR para Meta Quest
     renderer.xr.enabled = true;
-    renderer.xr.setReferenceSpaceType('local-floor'); // Importante para Quest
-    
     document.body.appendChild(renderer.domElement);
 
     const vrButton = VRButton.createButton(renderer);
     document.body.appendChild(vrButton);
-
-    // Verifica soporte VR
-    checkVRSupport().then((supported) => {
-      if (supported) {
-        console.log('VR is supported on this device');
-      } else {
-        console.warn('VR is not supported on this device');
-      }
-    });
 
     // Iluminación nocturna
     const hemi = new THREE.HemisphereLight(0x555577, 0x050509, 0.8);
@@ -780,17 +729,17 @@
       'rgbe/wide_street_4k.hdr',
       (texture) => {
         texture.mapping = THREE.EquirectangularReflectionMapping;
-        texture.encoding = THREE.RGBEEncoding; // Añade esta línea
 
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileEquirectangularShader();
         const envMap = pmremGenerator.fromEquirectangular(texture).texture;
         scene.environment = envMap;
-        scene.background = envMap; // Usa el HDR como fondo
         pmremGenerator.dispose();
 
-        // Ajusta exposición para VR
-        renderer.toneMappingExposure = 1.0;
+        const nightColor = new THREE.Color(0x050816);
+        scene.background = nightColor.clone();
+        scene.fog.color.copy(nightColor);
+        renderer.toneMappingExposure = 0.6;
 
         Object.values(materials).forEach(mat => {
           if (mat && (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) {
@@ -799,7 +748,7 @@
           }
         });
 
-        console.log('HDR environment loaded');
+        console.log('HDR environment loaded (night styling)');
         onModelLoaded();
       },
       (progress) => {
@@ -1157,7 +1106,7 @@
 
         carClone.userData = {
           type: 'car',
-          speed: THREE.Math.lerp(  // CORREGIDO: THREE.Math.lerp en lugar de THREE.MathUtils.lerp
+          speed: THREE.MathUtils.lerp(
             CONFIG.obstacles.carSpeedMin,
             CONFIG.obstacles.carSpeedMax,
             Math.random()
